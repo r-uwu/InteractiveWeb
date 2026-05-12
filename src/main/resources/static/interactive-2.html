@@ -1,0 +1,165 @@
+<html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>세련된 격자 왜곡 시뮬레이터</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0a0a0a;
+            /* 깊고 세련된 다크 그레이 */
+            font-family: sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.6);
+            pointer-events: none;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+        }
+    </style>
+</head>
+
+<body>
+<div id="info">
+    <h2>KINETIC MESH</h2>
+    <p>마우스를 움직여 공간을 왜곡시켜 보세요.</p>
+</div>
+<canvas id="meshCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('meshCanvas');
+    const ctx = canvas.getContext('2d');
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = window.innerHeight;
+    const particles = [];
+    const spacing = 40; // 격자의 간격
+    const mouse = {
+        x: -1000,
+        y: -1000,
+        radius: 150
+    };
+    // 마우스 이벤트
+    window.addEventListener('mousemove', (e) => {
+        mouse.x = e.clientX;
+        mouse.y = e.clientY;
+    });
+    // 화면 밖으로 마우스가 나가면 영향력 제거
+    window.addEventListener('mouseout', () => {
+        mouse.x = -1000;
+        mouse.y = -1000;
+    });
+    class Particle {
+        constructor(x, y) {
+            this.x = x;
+            this.y = y;
+            this.baseX = x; // 원래 돌아가야 할 X 좌표
+            this.baseY = y; // 원래 돌아가야 할 Y 좌표
+            this.vx = 0; // X축 속도
+            this.vy = 0; // Y축 속도
+        }
+        update() {
+            // 1. 마우스와의 거리 계산 (피타고라스)
+            let dx = mouse.x - this.x;
+            let dy = mouse.y - this.y;
+            let distance = Math.sqrt(dx * dx + dy * dy);
+            // 2. 마우스가 반경 안에 들어오면 밀어내기 (척력)
+            if (distance < mouse.radius) {
+                // 마우스에 가까울수록 밀어내는 힘이 강해짐
+                let force = (mouse.radius - distance) / mouse.radius;
+                let forceDirectionX = dx / distance;
+                let forceDirectionY = dy / distance;
+                // 속도에 힘을 누적 (음수를 곱해 반대 방향으로 밀어냄)
+                this.vx -= forceDirectionX * force * 5;
+                this.vy -= forceDirectionY * force * 5;
+            }
+            // 3. 용수철 물리 (원래 자리로 돌아가려는 성질)
+            // 훅의 법칙 (Hooke's Law): 변위가 클수록 돌아가려는 힘도 커짐
+            let springFactor = 0.1; // 탄성 (높을수록 튕김이 강함)
+            this.vx += (this.baseX - this.x) * springFactor;
+            this.vy += (this.baseY - this.y) * springFactor;
+            // 4. 마찰력 (영원히 흔들리지 않도록 속도를 점차 줄임)
+            let friction = 0.8;
+            this.vx *= friction;
+            this.vy *= friction;
+            // 5. 최종 위치 업데이트
+            this.x += this.vx;
+            this.y += this.vy;
+        }
+        draw() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, 2, 0, Math.PI * 2);
+            ctx.fillStyle = '#00ffcc'; // 형광 사이안
+            ctx.fill();
+        }
+    }
+    // 화면 크기에 맞춰 격자 입자 생성
+    function init() {
+        particles.length = 0;
+        // 화면 여백을 조금 남기고 격자 생성
+        for (let y = spacing; y < h - spacing; y += spacing) {
+            for (let x = spacing; x < w - spacing; x += spacing) {
+                particles.push(new Particle(x, y));
+            }
+        }
+    }
+    // 격자의 선 그리기 (이 부분이 세련미를 더해줍니다)
+    function drawLines() {
+        ctx.strokeStyle = 'rgba(0, 255, 204, 0.15)'; // 얇고 반투명한 선
+        ctx.lineWidth = 1;
+        // 입자가 격자 형태로 생성되었으므로, 가로 개수를 계산해 둡니다.
+        let cols = Math.floor((w - spacing * 2) / spacing) + 1;
+        for (let i = 0; i < particles.length; i++) {
+            let p = particles[i];
+            // 오른쪽 이웃과 선 연결
+            if ((i + 1) % cols !== 0 && i + 1 < particles.length) {
+                let rightNeighbor = particles[i + 1];
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(rightNeighbor.x, rightNeighbor.y);
+                ctx.stroke();
+            }
+            // 아래쪽 이웃과 선 연결
+            if (i + cols < particles.length) {
+                let bottomNeighbor = particles[i + cols];
+                ctx.beginPath();
+                ctx.moveTo(p.x, p.y);
+                ctx.lineTo(bottomNeighbor.x, bottomNeighbor.y);
+                ctx.stroke();
+            }
+        }
+    }
+
+    function animate() {
+        // 잔상 효과 없이 화면을 깔끔하게 지웁니다.
+        ctx.clearRect(0, 0, w, h);
+        // 선을 먼저 그리고
+        drawLines();
+        // 그 위에 점을 그립니다
+        for (let i = 0; i < particles.length; i++) {
+            particles[i].update();
+            particles[i].draw();
+        }
+        requestAnimationFrame(animate);
+    }
+    init();
+    animate();
+    // 화면 크기가 변하면 격자를 새로 만듭니다.
+    window.addEventListener('resize', () => {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        init();
+    });
+</script>
+</body>
+
+</html>

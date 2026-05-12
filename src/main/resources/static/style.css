@@ -1,0 +1,260 @@
+/* 1. Base Reset & Body Styling */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background-color: #050505;
+    color: #ffffff;
+    font-family: 'Poppins', 'Helvetica Neue', Arial, sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+/* 2. Page Transition Overlay */
+.transition-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #050505;
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.transition-overlay.active {
+    opacity: 1;
+    pointer-events: all;
+}
+
+/* 3. 3D Scene & Carousel Setup */
+.scene {
+    width: 100vw;
+    height: 100vh;
+    perspective: 3000px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.carousel {
+    width: 280px;
+    height: 420px;
+    position: relative;
+    transform-style: preserve-3d;
+    will-change: transform;
+}
+
+/* 4. Card Structure & Base Opacity */
+.card {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    left: 0;
+    top: 0;
+    cursor: pointer;
+    opacity: 0.3;
+    transition: opacity 0.5s ease, transform 0.4s ease;
+}
+
+.card.is-live {
+    opacity: 1;
+}
+
+/* 5. Card Content Container */
+.card-content {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: rgba(20, 20, 20, 0.8);
+    backdrop-filter: blur(5px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    box-shadow: 0 10px 50px rgba(0, 0, 0, 0.5);
+    transition: transform 0.4s cubic-bezier(0.165, 0.84, 0.44, 1),
+    box-shadow 0.4s ease,
+    background 0.4s ease,
+    border-color 0.4s ease;
+}
+
+/* 6. Hover Effects - Card Content */
+.card:hover .card-content {
+    transform: scale(1.05) translateY(-10px);
+    background: rgba(20, 20, 20, 0.2);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow: 0 20px 60px rgba(255, 255, 255, 0.15);
+}
+
+/* 7. Inner Elements: Preview Image (Layer 0) */
+.preview-image {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-size: cover;
+    background-position: center;
+    opacity: 0.1;
+    transition: opacity 0.5s ease;
+    z-index: 0;
+}
+
+.card:hover .preview-image {
+    opacity: 1;
+}
+
+/* 8. Inner Elements: Iframe (Layer 1) */
+.iframe-container {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+}
+
+.iframe-container iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+    pointer-events: none;
+}
+
+/* 9. Inner Elements: Loading Placeholder (Layer 2) */
+.loading-placeholder {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #111;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    z-index: 2;
+    transition: opacity 0.3s ease;
+    gap: 15px;
+}
+
+.spinner {
+    width: 30px;
+    height: 30px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top: 3px solid #fff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+.loading-placeholder span {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.5);
+    letter-spacing: 1px;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 10. Inner Elements: Text Content (Layer 3) */
+.text-content {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    padding: 30px 20px 20px;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.9) 0%, rgba(0, 0, 0, 0) 100%);
+    z-index: 3;
+    text-align: center;
+    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+    transform: translateY(10px);
+    transition: transform 0.4s ease;
+}
+
+.card:hover .text-content {
+    transform: translateY(0);
+}
+
+.text-content h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    color: #fff;
+    margin-bottom: 5px;
+}
+
+.text-content .preview-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.8);
+    opacity: 0;
+    transform: translateY(15px);
+    transition: all 0.4s ease;
+}
+
+.card:hover .preview-text {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Coming Soon Card Specific Styles */
+.card-content.coming-soon {
+    background: rgba(15, 15, 15, 0.95);
+    border: 1px dashed rgba(255, 255, 255, 0.15);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+}
+
+.card.not-ready {
+    cursor: default;
+}
+
+/* Diminished hover effect for unready cards to indicate inactivity */
+.card.not-ready:hover .card-content {
+    transform: scale(1.02) translateY(-5px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    border-color: rgba(255, 255, 255, 0.2);
+}
+
+.coming-soon-content {
+    padding: 20px;
+    opacity: 0.6;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.coming-soon-content .lock-icon {
+    margin-bottom: 15px;
+    opacity: 0.5;
+    stroke: #888;
+}
+
+.coming-soon-content h3 {
+    font-size: 1.1rem;
+    color: #999;
+    margin-bottom: 12px;
+    font-weight: 500;
+}
+
+.coming-soon-content .wait-text {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.4);
+    line-height: 1.6;
+    letter-spacing: 0.5px;
+}
