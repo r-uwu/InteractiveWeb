@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Procedural Island Generator</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #87ceeb; user-select: none; }
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; width: 320px;
+            background: rgba(20, 20, 20, 0.85); color: #fff;
+            padding: 20px; border-radius: 8px; font-family: sans-serif;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 100;
+        }
+        h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid #555; padding-bottom: 10px; }
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; justify-content: space-between; font-size: 14px; margin-bottom: 5px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        button {
+            width: 100%; padding: 10px; background: #4caf50; color: white;
+            border: none; border-radius: 4px; font-size: 14px; cursor: pointer;
+            transition: background 0.2s; margin-top: 10px;
+        }
+        button:hover { background: #45a049; }
+        .info { font-size: 12px; color: #aaa; margin-top: 5px; line-height: 1.4; }
+    </style>
+</head>
+<body>
+<div id="ui-layer">
+    <h2>절차적 섬 생성기</h2>
+
+    <div class="control-group">
+        <label><span>노이즈 스케일 (빈도)</span> <span id="val-scale">0.05</span></label>
+        <input type="range" id="inp-scale" min="0.01" max="0.15" step="0.01" value="0.05">
+    </div>
+
+    <div class="control-group">
+        <label><span>지형 최고 높이 (진폭)</span> <span id="val-elevation">18</span></label>
+        <input type="range" id="inp-elevation" min="5" max="40" step="1" value="18">
+    </div>
+
+    <div class="control-group">
+        <label><span>해수면 높이</span> <span id="val-water">2.0</span></label>
+        <input type="range" id="inp-water" min="0" max="15" step="0.5" value="2.0">
+    </div>
+
+    <div class="control-group">
+        <label><span>섬 외곽선 깎기 (Falloff)</span> <span id="val-falloff">2.5</span></label>
+        <input type="range" id="inp-falloff" min="0.0" max="5.0" step="0.1" value="2.5">
+        <div class="info">값이 클수록 섬이 작아지고 해안선이 안쪽으로 밀려납니다. 0으로 설정하면 무한한 대륙이 됩니다.</div>
+    </div>
+
+    <button id="btn-seed">무작위 시드 변경</button>
+</div>
+
+<!-- ES Module Import for Three.js -->
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+      }
+    }
+</script>
+<!-- Simplex Noise Library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    // 1. Scene, Camera, Renderer 설정
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x87ceeb, 0.012); // 하늘색 안개로 원경을 부드럽게 처리
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 40, 70);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x87ceeb); // 배경을 하늘색으로
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.01; // 카메라가 땅 밑으로 가지 않도록 제한
+
+    // 2. 조명 (Lighting)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    dirLight.position.set(50, 100, 50);
+    scene.add(dirLight);
+
+    // 3. 지형 (Terrain Geometry)
+    const mapSize = 120; // 맵 전체 크기
+    const segments = 128; // 해상도 (격자 수)
+    const geometry = new THREE.PlaneGeometry(mapSize, mapSize, segments, segments);
+    geometry.rotateX(-Math.PI / 2); // XZ 평면에 눕히기
+
+    // 정점 색상을 위한 버퍼 속성 추가
+    const count = geometry.attributes.position.count;
+    geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+
+    const material = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        roughness: 0.8,
+        flatShading: true // 로우폴리(Low-Poly) 스타일
+    });
+
+    const terrain = new THREE.Mesh(geometry, material);
+    scene.add(terrain);
+
+    // 4. 바다 (Water Plane)
+    const waterGeo = new THREE.PlaneGeometry(mapSize * 1.5, mapSize * 1.5);
+    waterGeo.rotateX(-Math.PI / 2);
+    const waterMat = new THREE.MeshStandardMaterial({
+        color: 0x1ca3ec,
+        transparent: true,
+        opacity: 0.75,
+        roughness: 0.1,
+        metalness: 0.1
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    scene.add(water);
+
+    // 5. 노이즈 및 색상 팔레트 설정
+    let simplex = new SimplexNoise();
+
+    const colorSand = new THREE.Color(0xe2d3a3); // 부드러운 모래색
+    const colorGrass = new THREE.Color(0x4caf50); // 잔디색
+    const colorRock = new THREE.Color(0x757575); // 바위색
+    const colorSnow = new THREE.Color(0xffffff); // 눈색
+
+    // UI 요소 가져오기
+    const inpScale = document.getElementById('inp-scale');
+    const inpElevation = document.getElementById('inp-elevation');
+    const inpWater = document.getElementById('inp-water');
+    const inpFalloff = document.getElementById('inp-falloff');
+
+    const valScale = document.getElementById('val-scale');
+    const valElevation = document.getElementById('val-elevation');
+    const valWater = document.getElementById('val-water');
+    const valFalloff = document.getElementById('val-falloff');
+    const btnSeed = document.getElementById('btn-seed');
+
+    // 6. 지형 업데이트 핵심 로직
+    function updateTerrain() {
+        const scale = parseFloat(inpScale.value);
+        const maxElevation = parseFloat(inpElevation.value);
+        const waterLevel = parseFloat(inpWater.value);
+        const falloffStrength = parseFloat(inpFalloff.value);
+
+        water.position.y = waterLevel; // 수위 업데이트
+
+        const positions = geometry.attributes.position.array;
+        const colors = geometry.attributes.color.array;
+        const halfMapSize = mapSize / 2;
+
+        for (let i = 0; i < count; i++) {
+            const ix = i * 3;
+            const x = positions[ix];
+            const z = positions[ix + 2];
+
+            // [가장자리 깎기] 정점의 중심으로부터의 거리를 0.0 ~ 1.0 (대략) 로 정규화
+            const nx = x / halfMapSize;
+            const nz = z / halfMapSize;
+            const distance = Math.sqrt(nx * nx + nz * nz);
+
+            // Fractal Noise (다중 주파수 중첩으로 디테일 향상)
+            let noiseValue = 0;
+            let amplitude = 1;
+            let frequency = scale;
+            let maxValue = 0;
+
+            for (let j = 0; j < 3; j++) {
+                noiseValue += simplex.noise2D(x * frequency, z * frequency) * amplitude;
+                maxValue += amplitude;
+                amplitude *= 0.5;
+                frequency *= 2;
+            }
+
+            // 노이즈 값을 0 ~ 1로 정규화 후 최고 높이 곱하기
+            noiseValue = (noiseValue / maxValue + 1) * 0.5;
+            let y = noiseValue * maxElevation;
+
+            // [Falloff 적용] 가장자리일수록 고도를 강제로 낮춤
+            if (falloffStrength > 0) {
+                const falloffDrop = Math.pow(distance, 3.0) * maxElevation * falloffStrength;
+                y -= falloffDrop;
+            }
+
+            positions[ix + 1] = y;
+
+            // 색상 계산 로직 (높이에 따른 보간)
+            const normalizedHeight = y / maxElevation;
+            let vertexColor = new THREE.Color();
+
+            // 해수면 근처는 모래, 그 위는 잔디, 바위, 눈 순서로 칠함
+            if (y < waterLevel + 0.8) {
+                vertexColor.copy(colorSand);
+            } else if (normalizedHeight < 0.4) {
+                vertexColor.copy(colorSand).lerp(colorGrass, (normalizedHeight - (waterLevel/maxElevation)) * 3);
+            } else if (normalizedHeight < 0.7) {
+                vertexColor.copy(colorGrass).lerp(colorRock, (normalizedHeight - 0.4) * 3.3);
+            } else {
+                vertexColor.copy(colorRock).lerp(colorSnow, (normalizedHeight - 0.7) * 3.3);
+            }
+
+            colors[ix] = vertexColor.r;
+            colors[ix + 1] = vertexColor.g;
+            colors[ix + 2] = vertexColor.b;
+        }
+
+        geometry.computeVertexNormals(); // 빛 반사를 위한 법선 벡터 재계산
+        geometry.attributes.position.needsUpdate = true;
+        geometry.attributes.color.needsUpdate = true;
+    }
+
+    // 7. UI 이벤트 리스너
+    inpScale.addEventListener('input', () => { valScale.textContent = inpScale.value; updateTerrain(); });
+    inpElevation.addEventListener('input', () => { valElevation.textContent = inpElevation.value; updateTerrain(); });
+    inpWater.addEventListener('input', () => { valWater.textContent = inpWater.value; updateTerrain(); });
+    inpFalloff.addEventListener('input', () => { valFalloff.textContent = inpFalloff.value; updateTerrain(); });
+
+    btnSeed.addEventListener('click', () => {
+        simplex = new SimplexNoise(); // 새로운 시드로 노이즈 객체 재생성
+        updateTerrain();
+    });
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 초기화 시 1회 실행
+    updateTerrain();
+
+    // 8. 렌더링 루프
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update(); // 카메라 부드러운 감속 효과
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+</html>

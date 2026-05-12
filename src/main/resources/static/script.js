@@ -2,34 +2,42 @@ document.addEventListener('DOMContentLoaded', () => {
     const carousel = document.getElementById('carousel');
     const overlay = document.getElementById('overlay');
 
-    const TOTAL_CARDS = 20;
+    const TOTAL_CARDS = 30;
     const CARD_WIDTH = 280;
-    const ROTATION_SPEED = 0.03;
+    const BASE_SPEED = 0.03;
     const LIVE_RANGE = 2;
 
-    /* Project metadata array */
+    /* Project Data setup omitted for brevity, assume projectData array exists here */
     const projectData = [
-        { title: "삐약이 간식 시간", url: "Interactive-1.html", isReady: true },
-        { title: "Kinetic Mesh Interactive", url: "Interactive-2.html", isReady: true },
-        { title: "", url: "Interactive-3.html", isReady: true },
-        { title: "", url: "Interactive-4.html", isReady: true },
-        { title: "", url: "Interactive-5.html", isReady: true },
-        { title: "Upcoming Interactive 6", url: "", isReady: false }
+        { title: "MyStudyMate Feynman UI", url: "Interactive-1.html", isReady: true },
+        { title: "Sliding Pudding Web Port", url: "Interactive-2.html", isReady: true },
+        { title: "Eternal Return Pixel Map", url: "Interactive-3.html", isReady: true },
+        { title: "Upcoming Interactive 4", url: "", isReady: false }
     ];
 
     const theta = 360 / TOTAL_CARDS;
     const radius = Math.round((CARD_WIDTH / 2) / Math.tan(Math.PI / TOTAL_CARDS));
 
     let rotationAngle = 0;
-    let isPaused = false;
+
+    /* Variables for robust playback control */
+    let speedMultiplier = 1;
+    let isManuallyPaused = false;
+    let isHoverPaused = false;
     let animationFrameId;
 
     const cardElements = [];
 
+    /* Control DOM Elements */
+    const btnPrev = document.getElementById('btn-prev');
+    const btnPlay = document.getElementById('btn-play');
+    const btnNext = document.getElementById('btn-next');
+    const iconPause = document.getElementById('icon-pause');
+    const iconPlay = document.getElementById('icon-play');
+
+    /* Card Generation Loop */
     for (let i = 0; i < TOTAL_CARDS; i++) {
         const cardAngle = theta * i;
-
-        /* Apply project data or default to 'Coming Soon' if index exceeds array length */
         const project = projectData[i] || { title: `Project ${i + 1}`, isReady: false };
 
         const card = document.createElement('div');
@@ -71,13 +79,71 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        card.addEventListener('mouseenter', () => isPaused = true);
-        card.addEventListener('mouseleave', () => isPaused = false);
+        /* Update hover logic to use specific hover state */
+        card.addEventListener('mouseenter', () => isHoverPaused = true);
+        card.addEventListener('mouseleave', () => isHoverPaused = false);
 
         carousel.appendChild(card);
         cardElements.push(card);
     }
 
+    /* Playback Control Logic */
+    function updatePlayIcon() {
+        if (isManuallyPaused) {
+            iconPause.style.display = 'none';
+            iconPlay.style.display = 'block';
+        } else {
+            iconPause.style.display = 'block';
+            iconPlay.style.display = 'none';
+        }
+    }
+
+    function updateSpeedButtonUI() {
+        btnPrev.classList.toggle('active-speed', speedMultiplier === -4);
+        btnNext.classList.toggle('active-speed', speedMultiplier === 4);
+    }
+
+    btnPlay.addEventListener('click', () => {
+        isManuallyPaused = !isManuallyPaused;
+
+        /* Reset to 1x speed if unpaused from a fast forward/rewind state */
+        if (!isManuallyPaused && speedMultiplier !== 1 && speedMultiplier !== -1) {
+            speedMultiplier = speedMultiplier > 0 ? 1 : -1;
+        }
+
+        updatePlayIcon();
+        updateSpeedButtonUI();
+    });
+
+    btnPrev.addEventListener('click', () => {
+        /* Toggle logic: Normal Reverse (-1) -> Fast Reverse (-4) -> Normal Reverse (-1) */
+        if (speedMultiplier > 0) {
+            speedMultiplier = -1;
+        } else if (speedMultiplier === -1) {
+            speedMultiplier = -4;
+        } else {
+            speedMultiplier = -1;
+        }
+        isManuallyPaused = false;
+        updatePlayIcon();
+        updateSpeedButtonUI();
+    });
+
+    btnNext.addEventListener('click', () => {
+        /* Toggle logic: Normal Forward (1) -> Fast Forward (4) -> Normal Forward (1) */
+        if (speedMultiplier < 0) {
+            speedMultiplier = 1;
+        } else if (speedMultiplier === 1) {
+            speedMultiplier = 4;
+        } else {
+            speedMultiplier = 1;
+        }
+        isManuallyPaused = false;
+        updatePlayIcon();
+        updateSpeedButtonUI();
+    });
+
+    /* Live Iframe Update Logic */
     function updateLiveIframes() {
         let centerIndex = Math.round((-rotationAngle % 360) / theta);
 
@@ -92,7 +158,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         cardElements.forEach((card, idx) => {
-            /* Skip iframe injection logic for unready cards */
             if (card.dataset.isReady !== "true") return;
 
             const container = card.querySelector('.iframe-container');
@@ -122,9 +187,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    /* Animation Loop */
     function animate() {
-        if (!isPaused) {
-            rotationAngle -= ROTATION_SPEED;
+        /* Rotate only if neither manually paused nor hovered */
+        if (!isManuallyPaused && !isHoverPaused) {
+            /* Apply speed multiplier to rotation speed */
+            rotationAngle -= (BASE_SPEED * speedMultiplier);
             carousel.style.transform = `translateZ(${-radius}px) rotateY(${rotationAngle}deg)`;
             updateLiveIframes();
         }
