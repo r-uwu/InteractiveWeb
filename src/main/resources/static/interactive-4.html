@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Massive 3D Wave Interference Simulator</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #01010a;
+            user-select: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 300px;
+            background: rgba(10, 10, 15, 0.85);
+            color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            border: 1px solid #333;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+            color: #00e5ff;
+        }
+
+        .instruction {
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 15px;
+            color: #aaa;
+        }
+
+        .control-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 5px;
+            color: #ddd;
+        }
+
+        input[type=range] {
+            width: 100%;
+            cursor: pointer;
+            accent-color: #00e5ff;
+        }
+
+        button {
+            width: 100%;
+            padding: 10px;
+            background: transparent;
+            color: #00e5ff;
+            border: 1px solid #00e5ff;
+            border-radius: 4px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #00e5ff;
+            color: #000;
+            box-shadow: 0 0 10px #00e5ff;
+        }
+    </style>
+</head>
+
+<body>
+<div id="ui-layer">
+    <h2>대규모 파동 간섭 시뮬레이터</h2>
+    <div class="instruction">
+        14,400개의 개별 큐브가 만들어내는 거대한 파동 현상입니다.<br><br>
+        <strong>좌클릭:</strong> 새로운 파동(돌멩이) 생성<br>
+        <strong>드래그:</strong> 시점 변경
+    </div>
+
+    <div class="control-group">
+        <label><span>파동 속도</span> <span id="val-speed">4.0</span></label>
+        <input type="range" id="inp-speed" min="1.0" max="15.0" step="0.1" value="4.0">
+    </div>
+    <div class="control-group">
+        <label><span>파동 진폭 (높이)</span> <span id="val-amp">1.2</span></label>
+        <input type="range" id="inp-amp" min="0.5" max="5.0" step="0.1" value="1.2">
+    </div>
+
+    <button id="btn-clear">파동 초기화 (중앙 물결만 유지)</button>
+</div>
+
+<!-- Three.js Import -->
+<script type="importmap">
+    {
+        "imports": {
+          "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+        }
+      }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import {
+        OrbitControls
+    } from 'three/addons/controls/OrbitControls.js';
+    // 1. Scene 설정
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x01010a, 0.012); // 안개를 짙게 깔아 끝을 자연스럽게 숨김
+    // 화면을 꽉 채우기 위해 카메라를 낮고 가깝게 배치
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 15, 45);
+    const renderer = new THREE.WebGLRenderer({
+        antialias: false
+    }); // 대규모 렌더링 성능을 위해 AA 끄기 권장
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // 픽셀 비율 제한으로 성능 확보
+    document.body.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+    controls.maxPolarAngle = Math.PI / 2 - 0.05; // 카메라가 바닥 밑으로 가지 않도록
+    // 2. 조명 설정
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+    const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+    dirLight.position.set(20, 50, 20);
+    scene.add(dirLight);
+    // 3. 거대한 큐브 격자 (InstancedMesh) 생성
+    const gridSize = 120; // 120x120 = 14,400개의 큐브 (이전보다 약 6배 증가)
+    const cubeSize = 0.9;
+    const spacing = 1.0;
+    const count = gridSize * gridSize;
+    const geometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize);
+    // 복잡한 빛 반사 연산을 줄여 성능을 확보하기 위해 Phong 대신 Lambert 사용
+    const material = new THREE.MeshLambertMaterial({
+        color: 0xffffff
+    });
+    const instancedMesh = new THREE.InstancedMesh(geometry, material, count);
+    scene.add(instancedMesh);
+    const dummy = new THREE.Object3D();
+    const colorDummy = new THREE.Color();
+    const positions = new Float32Array(count * 2); // X, Z 좌표만 메모리에 연속으로 저장 (성능 최적화)
+    let i = 0;
+    const offset = (gridSize * spacing) / 2;
+    for (let x = 0; x < gridSize; x++) {
+        for (let z = 0; z < gridSize; z++) {
+            const posX = x * spacing - offset;
+            const posZ = z * spacing - offset;
+            positions[i * 2] = posX;
+            positions[i * 2 + 1] = posZ;
+            dummy.position.set(posX, 0, posZ);
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(i, dummy.matrix);
+            i++;
+        }
+    }
+    instancedMesh.instanceMatrix.needsUpdate = true;
+    // 투명한 감지용 평면 (클릭 이벤트용)
+    const planeGeo = new THREE.PlaneGeometry(gridSize * spacing, gridSize * spacing);
+    planeGeo.rotateX(-Math.PI / 2);
+    const planeMesh = new THREE.Mesh(planeGeo, new THREE.MeshBasicMaterial({
+        visible: false
+    }));
+    scene.add(planeMesh);
+    // 4. 파동(Ripple) 관리
+    const clock = new THREE.Clock();
+    let ripples = [{
+        x: 0,
+        z: 0,
+        startTime: 0,
+        continuous: true
+    }];
+    // 5. 마우스 상호작용 (Raycasting)
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    document.addEventListener('mousedown', (e) => {
+        if (e.button !== 0) return;
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObject(planeMesh);
+        if (intersects.length > 0) {
+            ripples.push({
+                x: intersects[0].point.x,
+                z: intersects[0].point.z,
+                startTime: clock.getElapsedTime(),
+                continuous: false
+            });
+        }
+    });
+    // 6. UI 이벤트
+    const inpSpeed = document.getElementById('inp-speed');
+    const inpAmp = document.getElementById('inp-amp');
+    const valSpeed = document.getElementById('val-speed');
+    const valAmp = document.getElementById('val-amp');
+    inpSpeed.addEventListener('input', () => valSpeed.textContent = inpSpeed.value);
+    inpAmp.addEventListener('input', () => valAmp.textContent = inpAmp.value);
+    document.getElementById('btn-clear').addEventListener('click', () => {
+        ripples = [{
+            x: 0,
+            z: 0,
+            startTime: clock.getElapsedTime(),
+            continuous: true
+        }];
+    });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    // 심연의 바다 같은 색상 팔레트
+    const colorLow = new THREE.Color(0x00051a); // 깊고 어두운 남색 (골짜기)
+    const colorMid = new THREE.Color(0x0077ff); // 밝은 파란색 (중간)
+    const colorHigh = new THREE.Color(0xffffff); // 눈부신 하얀색 (물결의 정점)
+    // 7. 메인 애니메이션 루프 (수만 번의 연산 수행)
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        const time = clock.getElapsedTime();
+        const speed = parseFloat(inpSpeed.value);
+        const amplitude = parseFloat(inpAmp.value);
+        const frequency = 0.5;
+        // 14,400개의 큐브 순회 연산
+        for (let i = 0; i < count; i++) {
+            const posX = positions[i * 2];
+            const posZ = positions[i * 2 + 1];
+            let finalY = 0;
+            for (let r = 0; r < ripples.length; r++) {
+                const ripple = ripples[r];
+                // 거리 계산 (최적화를 위해 Math.hypot 사용 가능하나 호환성 위해 유지)
+                const dist = Math.sqrt((posX - ripple.x) ** 2 + (posZ - ripple.z) ** 2);
+                const elapsedTime = time - ripple.startTime;
+                let wave = Math.sin(dist * frequency - elapsedTime * speed);
+                if (!ripple.continuous) {
+                    const lifeTime = elapsedTime * 0.2; // 파동 유지 시간 조절
+                    const dampFactor = Math.max(0, 1 - lifeTime);
+                    wave *= dampFactor;
+                }
+                finalY += wave * amplitude;
+            }
+            // 매트릭스 업데이트
+            dummy.position.set(posX, finalY, posZ);
+            dummy.updateMatrix();
+            instancedMesh.setMatrixAt(i, dummy.matrix);
+            // 색상 보간 (컬러 매핑)
+            // 여러 파동이 겹쳐서 amplitude*2 범위를 넘어갈 수도 있으므로 clamp 적용
+            let normalizedY = (finalY / (amplitude * 2.5)) + 0.5;
+            normalizedY = Math.max(0, Math.min(1, normalizedY));
+            if (normalizedY < 0.5) {
+                colorDummy.lerpColors(colorLow, colorMid, normalizedY * 2);
+            } else {
+                colorDummy.lerpColors(colorMid, colorHigh, (normalizedY - 0.5) * 2);
+            }
+            instancedMesh.setColorAt(i, colorDummy);
+        }
+        instancedMesh.instanceMatrix.needsUpdate = true;
+        instancedMesh.instanceColor.needsUpdate = true;
+        // 소멸된 파동 정리
+        ripples = ripples.filter(r => r.continuous || (time - r.startTime) * 0.2 < 1);
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+
+</html>

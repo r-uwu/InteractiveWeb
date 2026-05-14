@@ -9,9 +9,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     /* Project Data setup omitted for brevity, assume projectData array exists here */
     const projectData = [
-        { title: "MyStudyMate Feynman UI", url: "Interactive-1.html", isReady: true },
-        { title: "Sliding Pudding Web Port", url: "Interactive-2.html", isReady: true },
-        { title: "Eternal Return Pixel Map", url: "Interactive-3.html", isReady: true },
+        { title: "삐약이 간식 시간", url: "Interactive-1.html", isReady: true },
+        { title: "Kinetic Mesh", url: "Interactive-2.html", isReady: true },
+        { title: "절차적 섬 생성기", url: "Interactive-3.html", isReady: true },
+        { title: "대규모 파동 간섭", url: "Interactive-4.html", isReady: true },
+        { title: "프랙탈 나무", url: "Interactive-5.html", isReady: true },
+        { title: "복셀 아트", url: "Interactive-6.html", isReady: true },
+        { title: "오로라 우주 파티클 심포니", url: "Interactive-7.html", isReady: true },
+        { title: "네트워크 포폴로지", url: "Interactive-8.html", isReady: true },
         { title: "Upcoming Interactive 4", url: "", isReady: false }
     ];
 
