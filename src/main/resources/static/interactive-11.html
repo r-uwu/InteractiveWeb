@@ -1,0 +1,100 @@
+<html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>보이지 않는 바람: 플로우 필드</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #050505;
+            /* 아주 깊은 밤하늘 색 */
+            font-family: sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            pointer-events: none;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+
+<body>
+<div id="info">
+    <h2>보이지 않는 바람 (Flow Field)</h2>
+    <p>마우스를 화면 좌우로 움직여 바람의 결을 조절해보세요.</p>
+</div>
+<canvas id="flowCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('flowCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const particles = [];
+    const numParticles = 2000; // 2천 개의 먼지 입자
+    let mouseX = window.innerWidth / 2; // 마우스 기본 위치 중앙
+    // 마우스 X 좌표 추적
+    window.addEventListener('mousemove', (e) => {
+        mouseX = e.clientX;
+    });
+    // 파티클 생성
+    for (let i = 0; i < numParticles; i++) {
+        particles.push({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            speed: Math.random() * 2 + 1, // 각기 다른 속도
+            // 파란색, 보라색, 핑크색 계열의 오로라 같은 색상
+            color: `hsl(${200 + Math.random() * 80}, 100%, 60%)`
+        });
+    }
+
+    function animate() {
+        // 완전히 지우지 않고 아주 옅은 검은색을 덮어 붓 터치(잔상)를 만듭니다.
+        ctx.fillStyle = 'rgba(5, 5, 5, 0.05)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // 마우스 위치에 따라 바람의 복잡도(주파수)가 변함 (0.001 ~ 0.005 사이)
+        let zoom = (mouseX / canvas.width) * 0.004 + 0.001;
+        particles.forEach(p => {
+            // **핵심 수학**: 현재 좌표(x, y)를 삼각함수(sin, cos)에 넣어 방향 각도를 얻어냅니다.
+            // 이 수학 공식이 보이지 않는 언덕과 계곡을 만듭니다.
+            let angle = (Math.sin(p.x * zoom) + Math.cos(p.y * zoom)) * Math.PI * 2;
+            // 각도를 바탕으로 다음 위치로 이동
+            p.x += Math.cos(angle) * p.speed;
+            p.y += Math.sin(angle) * p.speed;
+            // 화면 밖으로 날아가면 다시 화면 안 무작위 위치에서 태어납니다.
+            if (p.x < 0 || p.x > canvas.width || p.y < 0 || p.y > canvas.height) {
+                p.x = Math.random() * canvas.width;
+                p.y = Math.random() * canvas.height;
+            }
+            // 먼지 입자 그리기
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+        });
+        requestAnimationFrame(animate);
+    }
+    animate();
+    // 화면 크기 조절 대응
+    window.addEventListener('resize', () => {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // 리사이즈 할 때 잔상이 지저분해지는 것 방지
+        ctx.fillStyle = '#050505';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    });
+</script>
+</body>
+
+</html>

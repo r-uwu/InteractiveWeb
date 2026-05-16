@@ -1,0 +1,156 @@
+<html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>네온 스트릿 드라이브: 레트로 퓨처</title>
+    <style>
+        /* 기본 여백을 없애고 화면을 꽉 채웁니다 */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #05011a;
+            /* 아주 어두운 남색 배경으로 힙한 분위기 연출 */
+            font-family: 'Poppins', sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* 힙한 타이틀을 왼쪽 하단에 배치 */
+        #ui {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            color: #ff007f;
+            /* 네온 핑크 */
+            pointer-events: none;
+            text-shadow: 0 0 10px #ff007f;
+        }
+
+        #ui h1 {
+            font-size: 3em;
+            margin: 0;
+            font-weight: 800;
+        }
+
+        #ui p {
+            font-size: 1.2em;
+            color: #00ffff;
+            text-shadow: 0 0 8px #00ffff;
+        }
+    </style>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;800&display=swap" rel="stylesheet">
+</head>
+
+<body>
+
+<div id="ui">
+    <h1>NEON DRIVE</h1>
+    <p>Retro-Futuristic Endless Road</p>
+</div>
+
+<canvas id="neonCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('neonCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    // 중앙 지점 (소실점)
+    const centerX = canvas.width / 2;
+    const centerY = canvas.height * 0.6; // 지평선 위치
+    // 도로 설정
+    const gridLines = [];
+    const gridZCount = 50; // 와이어프레임 선의 개수 (깊이)
+    const gridSpeed = 2; // 선이 다가오는 속도
+    let time = 0; // 색상 변화를 위한 시간 변수
+    // 초기 grid 설정
+    for (let i = 0; i < gridZCount; i++) {
+        gridLines.push({
+            z: i * 15,
+            colorOffset: Math.random()
+        });
+    }
+    // 끝없이 실행되는 애니메이션 루프
+    function animate() {
+        // 배경 그리기 (이전 프레임을 완전히 지우지 않아 잔상을 만듦)
+        ctx.fillStyle = 'rgba(5, 1, 26, 0.2)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        drawSky(); // 하늘과 태양 그리기
+        updateAndDrawGrid(); // 와이어프레임 도로 업데이트 및 그리기
+        time += 0.01; // 색상 변화 속도
+        requestAnimationFrame(animate);
+    }
+    // 하늘과 지는 태양 그리기
+    function drawSky() {
+        // 그라데이션 하늘
+        const skyGradient = ctx.createLinearGradient(0, 0, 0, centerY);
+        skyGradient.addColorStop(0, '#0a0233');
+        skyGradient.addColorStop(1, '#ff007f'); // 네온 핑크 지평선
+        ctx.fillStyle = skyGradient;
+        ctx.fillRect(0, 0, canvas.width, centerY);
+        // 거대한 네온 태양
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(centerX, centerY - 20, 150, 0, Math.PI * 2);
+        ctx.fillStyle = '#ffcc00'; // 주황/노랑 네온
+        ctx.shadowBlur = 50;
+        ctx.shadowColor = '#ffcc00';
+        ctx.fill();
+        ctx.restore();
+    }
+    // 와이어프레임 도로 그리기 (핵심)
+    function updateAndDrawGrid() {
+        // 빛나는 효과 설정 (공통)
+        ctx.shadowBlur = 15;
+        ctx.lineWidth = 2;
+        gridLines.forEach(line => {
+            // 선을 앞으로 전진시킴 (z값 감소)
+            line.z -= gridSpeed;
+            // 선이 화면 앞으로 지나가면 뒤로 재배치 (무한 루프)
+            if (line.z <= 1) {
+                line.z = gridZCount * 15;
+            }
+            // 3D 소실점 투영 계산 (z값이 작을수록 선이 굵고 가깝게 보임)
+            const factor = 1000 / line.z; // 깊이에 따른 축소 비율
+            const y = centerY + factor;
+            const width = canvas.width * factor * 0.5;
+            // 색상 계산 (시간과 깊이에 따라 네온 사이안 <-> 핑크 변화)
+            const hue = (time * 50 + line.colorOffset * 360) % 360;
+            ctx.strokeStyle = `hsl(${hue}, 100%, 70%)`; // 네온 색상
+            ctx.shadowColor = `hsl(${hue}, 100%, 70%)`;
+            // 가로선 그리기 (와이어프레임 도로의 가로줄)
+            ctx.beginPath();
+            ctx.moveTo(centerX - width, y);
+            ctx.lineTo(centerX + width, y);
+            ctx.stroke();
+        });
+        // 세로선 그리기 (소실점으로 모이는 세로줄들)
+        ctx.strokeStyle = '#00ffff'; // 세로선은 사이안 색상 고정
+        ctx.shadowColor = '#00ffff';
+        const numVerticalLines = 12;
+        for (let i = 0; i < numVerticalLines; i++) {
+            const startAngle = -Math.PI / 2 + (i / (numVerticalLines - 1)) * Math.PI;
+            const startX = centerX + Math.cos(startAngle) * canvas.width * 2;
+            ctx.beginPath();
+            ctx.moveTo(startX, canvas.height);
+            ctx.lineTo(centerX, centerY); // 모든 세로선은 소실점으로 모임
+            ctx.stroke();
+        }
+    }
+    animate();
+    // 창 크기가 바뀔 때 캔버스 크기 다시 맞춤
+    window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        // 소실점도 재계산
+        centerX = canvas.width / 2;
+        centerY = canvas.height * 0.6;
+    });
+</script>
+</body>
+
+</html>

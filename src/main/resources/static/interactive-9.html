@@ -1,0 +1,145 @@
+<html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>초공간 도약: 워프 드라이브</title>
+    <style>
+        /* CSS 때려박기: 여백 없애고 우주처럼 새까만 배경 */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', monospace;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(0, 255, 255, 0.5);
+            text-align: center;
+            pointer-events: none;
+            /* 마우스 이벤트가 캔버스로 통과되도록 */
+            text-shadow: 0 0 10px rgba(0, 255, 255, 0.8);
+        }
+
+        h1 {
+            font-size: 3rem;
+            margin: 0;
+            letter-spacing: 5px;
+        }
+
+        p {
+            margin-top: 10px;
+        }
+    </style>
+</head>
+
+<body>
+<div id="ui">
+    <h1>WARP SPEED</h1>
+    <p>마우스를 움직여 우주선의 방향을 조절하세요</p>
+</div>
+
+<canvas id="spaceCanvas"></canvas>
+
+<script>
+    // JS 때려박기
+    const canvas = document.getElementById('spaceCanvas');
+    const ctx = canvas.getContext('2d');
+    let w = canvas.width = window.innerWidth;
+    let h = canvas.height = window.innerHeight;
+    const stars = [];
+    const numStars = 800; // 별의 개수
+    const speed = 15; // 우주선 속도 (Z축 이동 속도)
+    // 마우스 위치 (초기값은 화면 정중앙)
+    let targetX = w / 2;
+    let targetY = h / 2;
+    // 카메라(소실점) 위치
+    let cameraX = w / 2;
+    let cameraY = h / 2;
+    window.addEventListener('mousemove', (e) => {
+        targetX = e.clientX;
+        targetY = e.clientY;
+    });
+    // 3D 별 클래스
+    class Star {
+        constructor() {
+            this.reset();
+        }
+        reset() {
+            // 가상의 3D 공간 좌표계 (-w ~ w 범위)
+            this.x = (Math.random() - 0.5) * w * 2;
+            this.y = (Math.random() - 0.5) * h * 2;
+            this.z = Math.random() * w; // 깊이 (Z축)
+            this.pz = this.z; // 이전 프레임의 깊이 (선을 그리기 위해 기억)
+        }
+        update() {
+            this.pz = this.z;
+            this.z -= speed; // 별이 내 앞으로 다가옴 (Z축 감소)
+            // 별이 내 등 뒤(카메라 뒤)로 넘어가면 화면 저 멀리서 다시 생성
+            if (this.z < 1) {
+                this.reset();
+                this.z = w; // 깊이를 다시 제일 멀리 세팅
+                this.pz = this.z;
+            }
+        }
+        draw() {
+            // **핵심 수학**: 3D 투영 (Perspective Projection)
+            // x와 y를 z로 나누어, 멀리 있을수록 중앙에 모이고 가까울수록 퍼지게 만듭니다.
+            let focalLength = w / 2;
+            // 현재 좌표의 화면 투영
+            let projectedX = (this.x / this.z) * focalLength + cameraX;
+            let projectedY = (this.y / this.z) * focalLength + cameraY;
+            // 이전 프레임 좌표의 화면 투영 (꼬리를 길게 늘이기 위해)
+            let prevProjectedX = (this.x / this.pz) * focalLength + cameraX;
+            let prevProjectedY = (this.y / this.pz) * focalLength + cameraY;
+            // 거리에 따른 투명도 및 두께 조절 (가까울수록 밝고 굵음)
+            let opacity = 1 - (this.z / w);
+            let size = (1 - (this.z / w)) * 3;
+            ctx.beginPath();
+            ctx.moveTo(prevProjectedX, prevProjectedY);
+            ctx.lineTo(projectedX, projectedY);
+            ctx.lineWidth = size;
+            ctx.strokeStyle = `rgba(0, 255, 255, ${opacity})`; // 사이안(청록색) 레이저
+            ctx.stroke();
+        }
+    }
+    // 별 생성
+    for (let i = 0; i < numStars; i++) {
+        stars.push(new Star());
+    }
+    // 애니메이션 루프
+    function animate() {
+        // 마우스를 따라 카메라(소실점)가 부드럽게 이동하는 보간(Lerp) 연산
+        cameraX += (targetX - cameraX) * 0.05;
+        cameraY += (targetY - cameraY) * 0.05;
+        // 배경을 잔상 효과와 함께 지우기
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+        ctx.fillRect(0, 0, w, h);
+        // 모든 별 업데이트 및 그리기
+        for (let star of stars) {
+            star.update();
+            star.draw();
+        }
+        requestAnimationFrame(animate);
+    }
+    animate();
+    // 화면 크기 변경 대응
+    window.addEventListener('resize', () => {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+        targetX = w / 2;
+        targetY = h / 2;
+    });
+</script>
+</body>
+
+</html>

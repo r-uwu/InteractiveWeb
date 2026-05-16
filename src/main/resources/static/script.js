@@ -17,6 +17,9 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "복셀 아트", url: "Interactive-6.html", isReady: true },
         { title: "오로라 우주 파티클 심포니", url: "Interactive-7.html", isReady: true },
         { title: "네트워크 포폴로지", url: "Interactive-8.html", isReady: true },
+        { title: "WARP SPACE", url: "Interactive-9.html", isReady: true },
+        { title: "NEON DRIVE", url: "Interactive-10.html", isReady: true },
+        { title: "바람", url: "Interactive-11.html", isReady: true },
         { title: "Upcoming Interactive 4", url: "", isReady: false }
     ];
 
