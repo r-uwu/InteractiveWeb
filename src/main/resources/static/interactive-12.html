@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>3D Shader Galaxy Particle System</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000000; user-select: none; }
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; width: 320px;
+            background: rgba(10, 10, 15, 0.85); color: #fff;
+            padding: 20px; border-radius: 12px; font-family: sans-serif;
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.8); z-index: 100;
+            border: 1px solid #222;
+            backdrop-filter: blur(5px);
+        }
+        h2 { margin-top: 0; font-size: 18px; border-bottom: 1px solid #444; padding-bottom: 10px; color: #ff007f; text-shadow: 0 0 10px rgba(255,0,127,0.5); }
+        .instruction { font-size: 12px; line-height: 1.6; margin-bottom: 15px; color: #bbb; }
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; color: #ddd; font-weight: bold; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #ff007f; }
+
+        @media (max-width: 560px) {
+            #ui-layer { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div id="ui-layer">
+    <h2>심연의 은하계 (GPU Shaders)</h2>
+    <div class="instruction">
+        20만 개의 파티클이 GPU 셰이더를 통해 실시간 연산됩니다.<br><br>
+        <strong>마우스 이동:</strong> 은하계 공간 왜곡 (블랙홀 척력)<br>
+        <strong>좌클릭 드래그:</strong> 시점 궤도 회전<br>
+        <strong>휠 스크롤:</strong> 줌 인/아웃
+    </div>
+
+    <div class="control-group">
+        <label><span>파티클 개수</span> <span id="val-count">200000</span></label>
+        <input type="range" id="inp-count" min="10000" max="300000" step="10000" value="200000">
+    </div>
+    <div class="control-group">
+        <label><span>은하 반경</span> <span id="val-radius">7.0</span></label>
+        <input type="range" id="inp-radius" min="2.0" max="15.0" step="0.5" value="7.0">
+    </div>
+    <div class="control-group">
+        <label><span>나선팔 개수</span> <span id="val-branches">4</span></label>
+        <input type="range" id="inp-branches" min="2" max="10" step="1" value="4">
+    </div>
+    <div class="control-group">
+        <label><span>회전 속도</span> <span id="val-speed">0.2</span></label>
+        <input type="range" id="inp-speed" min="0.0" max="1.0" step="0.05" value="0.2">
+    </div>
+    <div class="control-group">
+        <label><span>왜곡력 (Repulsion)</span> <span id="val-repel">2.0</span></label>
+        <input type="range" id="inp-repel" min="0.0" max="5.0" step="0.1" value="2.0">
+    </div>
+</div>
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+      }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+    camera.position.set(3, 5, 6);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // Custom GLSL Shaders
+    const galaxyVertexShader = `
+            uniform float uTime;
+            uniform vec3 uMousePos;
+            uniform float uRepelStrength;
+
+            attribute float aScale;
+            attribute vec3 aRandomness;
+
+            varying vec3 vColor;
+
+            void main() {
+                vec4 modelPosition = modelMatrix * vec4(position, 1.0);
+
+                // Spin Logic based on distance
+                float angle = atan(modelPosition.x, modelPosition.z);
+                float distanceToCenter = length(modelPosition.xz);
+                float angleOffset = (1.0 / distanceToCenter) * uTime;
+                angle += angleOffset;
+
+                modelPosition.x = cos(angle) * distanceToCenter;
+                modelPosition.z = sin(angle) * distanceToCenter;
+
+                // Add randomness
+                modelPosition.xyz += aRandomness;
+
+                // Mouse Interaction (Repulsion)
+                float distToMouse = distance(modelPosition.xyz, uMousePos);
+                float repelRadius = 2.5;
+                if(distToMouse < repelRadius && uRepelStrength > 0.0) {
+                    vec3 direction = normalize(modelPosition.xyz - uMousePos);
+                    float force = (repelRadius - distToMouse) / repelRadius;
+                    modelPosition.xyz += direction * force * uRepelStrength;
+                }
+
+                vec4 viewPosition = viewMatrix * modelPosition;
+                vec4 projectedPosition = projectionMatrix * viewPosition;
+                gl_Position = projectedPosition;
+
+                // Size attenuation
+                gl_PointSize = 30.0 * aScale;
+                gl_PointSize *= (1.0 / -viewPosition.z);
+
+                vColor = color;
+            }
+        `;
+
+    const galaxyFragmentShader = `
+            varying vec3 vColor;
+
+            void main() {
+                // Point calculation for soft glowing stars
+                float strength = distance(gl_PointCoord, vec2(0.5));
+                strength = 1.0 - strength;
+                strength = pow(strength, 4.0);
+
+                vec3 finalColor = mix(vec3(0.0), vColor, strength);
+                gl_FragColor = vec4(finalColor, 1.0);
+            }
+        `;
+
+    let geometry = null;
+    let material = null;
+    let points = null;
+
+    const uniforms = {
+        uTime: { value: 0 },
+        uMousePos: { value: new THREE.Vector3(999, 999, 999) },
+        uRepelStrength: { value: 2.0 }
+    };
+
+    const generateGalaxy = () => {
+        if(points !== null) {
+            geometry.dispose();
+            material.dispose();
+            scene.remove(points);
+        }
+
+        const count = parseInt(document.getElementById('inp-count').value);
+        const radius = parseFloat(document.getElementById('inp-radius').value);
+        const branches = parseInt(document.getElementById('inp-branches').value);
+        const randomnessPower = 3;
+
+        geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(count * 3);
+        const colors = new Float32Array(count * 3);
+        const scales = new Float32Array(count);
+        const randomness = new Float32Array(count * 3);
+
+        const colorInside = new THREE.Color(0xffe6a0);
+        const colorOutside = new THREE.Color(0x3a0088);
+
+        for(let i = 0; i < count; i++) {
+            const i3 = i * 3;
+            const r = Math.random() * radius;
+            const branchAngle = (i % branches) / branches * Math.PI * 2;
+
+            // Position logic (flat circle, randomness added in shader)
+            positions[i3] = Math.cos(branchAngle) * r;
+            positions[i3 + 1] = 0.0;
+            positions[i3 + 2] = Math.sin(branchAngle) * r;
+
+            // Randomness generator (power rule for concentrated core)
+            const randomX = Math.pow(Math.random(), randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * r * 0.3;
+            const randomY = Math.pow(Math.random(), randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * r * 0.3;
+            const randomZ = Math.pow(Math.random(), randomnessPower) * (Math.random() < 0.5 ? 1 : -1) * r * 0.3;
+
+            randomness[i3] = randomX;
+            randomness[i3 + 1] = randomY;
+            randomness[i3 + 2] = randomZ;
+
+            // Color interpolation
+            const mixedColor = colorInside.clone();
+            mixedColor.lerp(colorOutside, r / radius);
+
+            colors[i3] = mixedColor.r;
+            colors[i3 + 1] = mixedColor.g;
+            colors[i3 + 2] = mixedColor.b;
+
+            scales[i] = Math.random();
+        }
+
+        geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+        geometry.setAttribute('aScale', new THREE.BufferAttribute(scales, 1));
+        geometry.setAttribute('aRandomness', new THREE.BufferAttribute(randomness, 3));
+
+        material = new THREE.ShaderMaterial({
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            vertexColors: true,
+            vertexShader: galaxyVertexShader,
+            fragmentShader: galaxyFragmentShader,
+            uniforms: uniforms
+        });
+
+        points = new THREE.Points(geometry, material);
+        scene.add(points);
+    };
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    const intersectPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const intersectPoint = new THREE.Vector3();
+
+    document.addEventListener('mousemove', (event) => {
+        mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+        raycaster.setFromCamera(mouse, camera);
+        raycaster.ray.intersectPlane(intersectPlane, intersectPoint);
+        uniforms.uMousePos.value.copy(intersectPoint);
+    });
+
+    const bindSlider = (id, valId, isFloat = false) => {
+        const el = document.getElementById(id);
+        const display = document.getElementById(valId);
+        el.addEventListener('input', () => {
+            display.textContent = el.value;
+            if (id !== 'inp-speed' && id !== 'inp-repel') {
+                generateGalaxy();
+            } else if (id === 'inp-repel') {
+                uniforms.uRepelStrength.value = parseFloat(el.value);
+            }
+        });
+    };
+
+    bindSlider('inp-count', 'val-count');
+    bindSlider('inp-radius', 'val-radius');
+    bindSlider('inp-branches', 'val-branches');
+    bindSlider('inp-speed', 'val-speed', true);
+    bindSlider('inp-repel', 'val-repel', true);
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    generateGalaxy();
+
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const elapsedTime = clock.getElapsedTime();
+        const speed = parseFloat(document.getElementById('inp-speed').value);
+
+        uniforms.uTime.value = elapsedTime * speed;
+        controls.update();
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+</html>

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <title>3D Particle Grand Piano</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #0d0d1a;
+            user-select: none;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 15px;
+            left: 15px;
+            width: 340px;
+            background: rgba(20, 20, 25, 0.85);
+            color: #e0e0e0;
+            padding: 20px;
+            border-radius: 12px;
+            font-family: sans-serif;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8);
+            z-index: 100;
+            pointer-events: none;
+            border: 1px solid #333;
+        }
+
+        h2 {
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 10px;
+            color: #4caf50;
+        }
+
+        .instruction {
+            font-size: 13px;
+            line-height: 1.6;
+            margin-bottom: 15px;
+            color: #aaa;
+        }
+
+        .key-map {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            font-family: monospace;
+            font-size: 12px;
+            color: #ddd;
+        }
+
+        .octave-title {
+            color: #888;
+            font-weight: bold;
+            margin-bottom: 3px;
+        }
+
+        .key-row {
+            display: flex;
+            justify-content: space-between;
+        }
+
+        #audio-warning {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-family: sans-serif;
+            cursor: pointer;
+            z-index: 200;
+            box-shadow: 0 0 15px rgba(76, 175, 80, 0.5);
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+<div id="audio-warning">사운드 활성화를 위해 화면을 클릭하세요</div>
+
+<div id="ui-layer">
+    <h2>3D 파티클 그랜드 피아노</h2>
+    <div class="instruction">
+        마우스 클릭 또는 키보드를 사용하여 2옥타브를 연주해보세요.<br>
+        건반을 누르면 파티클 효과가 발생합니다.
+    </div>
+    <div class="key-map">
+        <div>
+            <div class="octave-title">[낮은 옥타브 (C4 ~ B4)]</div>
+            <div class="key-row"><span>백건: Z X C V B N M</span><span>흑건: S D G H J</span></div>
+        </div>
+        <div>
+            <div class="octave-title">[높은 옥타브 (C5 ~ B5)]</div>
+            <div class="key-row"><span>백건: Q W E R T Y U</span><span>흑건: 2 3 5 6 7</span></div>
+        </div>
+    </div>
+</div>
+
+<!-- Three.js Import -->
+<script type="importmap">
+    {
+        "imports": {
+          "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+        }
+      }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import {
+        OrbitControls
+    } from 'three/addons/controls/OrbitControls.js';
+    // 1. Web Audio API (사운드 합성)
+    let audioCtx;
+    let isAudioInitialized = false;
+
+    function initAudio() {
+        if (isAudioInitialized) return;
+        audioCtx = new(window.AudioContext || window.webkitAudioContext)();
+        isAudioInitialized = true;
+        document.getElementById('audio-warning').style.display = 'none';
+    }
+    window.addEventListener('click', initAudio, {
+        once: true
+    });
+    window.addEventListener('keydown', initAudio, {
+        once: true
+    });
+    const activeOscillators = {};
+
+    function playNote(noteId, frequency) {
+        if (!audioCtx || activeOscillators[noteId]) return;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = 'triangle'; // 신디사이저 느낌의 삼각파
+        osc.frequency.setValueAtTime(frequency, audioCtx.currentTime);
+        // ADSR 엔벨로프 (부드러운 소리 시작)
+        gain.gain.setValueAtTime(0, audioCtx.currentTime);
+        gain.gain.linearRampToValueAtTime(0.4, audioCtx.currentTime + 0.05);
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        activeOscillators[noteId] = {
+            osc,
+            gain
+        };
+    }
+
+    function stopNote(noteId) {
+        if (!audioCtx || !activeOscillators[noteId]) return;
+        const {
+            osc,
+            gain
+        } = activeOscillators[noteId];
+        const stopTime = audioCtx.currentTime + 0.1;
+        // ADSR 릴리즈 (부드러운 소리 끝맺음)
+        gain.gain.linearRampToValueAtTime(0, stopTime);
+        osc.stop(stopTime);
+        setTimeout(() => {
+            osc.disconnect();
+            gain.disconnect();
+        }, 200);
+        delete activeOscillators[noteId];
+    }
+    // 2. Three.js 기본 씬 셋업
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x0d0d1a, 0.02);
+    const camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 15, 20);
+    const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+    });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    document.body.appendChild(renderer.domElement);
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.target.set(0, 0, 0);
+    controls.maxPolarAngle = Math.PI / 2 - 0.1; // 바닥 밑으로 카메라 방지
+    // 조명 셋업 (드라마틱한 연출)
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+    scene.add(ambientLight);
+    const spotLight = new THREE.SpotLight(0xffffff, 1.5);
+    spotLight.position.set(0, 25, 10);
+    spotLight.angle = Math.PI / 3;
+    spotLight.penumbra = 0.8;
+    spotLight.castShadow = true;
+    spotLight.shadow.mapSize.width = 2048;
+    spotLight.shadow.mapSize.height = 2048;
+    scene.add(spotLight);
+    // 3. 건반 데이터 (2옥타브)
+    const notes = [
+        // Octave 1 (C4 ~ B4)
+        {
+            key: 'z',
+            note: 'C4',
+            freq: 261.63,
+            type: 'white'
+        },
+        {
+            key: 's',
+            note: 'C#4',
+            freq: 277.18,
+            type: 'black'
+        },
+        {
+            key: 'x',
+            note: 'D4',
+            freq: 293.66,
+            type: 'white'
+        },
+        {
+            key: 'd',
+            note: 'D#4',
+            freq: 311.13,
+            type: 'black'
+        },
+        {
+            key: 'c',
+            note: 'E4',
+            freq: 329.63,
+            type: 'white'
+        },
+        {
+            key: 'v',
+            note: 'F4',
+            freq: 349.23,
+            type: 'white'
+        },
+        {
+            key: 'g',
+            note: 'F#4',
+            freq: 369.99,
+            type: 'black'
+        },
+        {
+            key: 'b',
+            note: 'G4',
+            freq: 392.00,
+            type: 'white'
+        },
+        {
+            key: 'h',
+            note: 'G#4',
+            freq: 415.30,
+            type: 'black'
+        },
+        {
+            key: 'n',
+            note: 'A4',
+            freq: 440.00,
+            type: 'white'
+        },
+        {
+            key: 'j',
+            note: 'A#4',
+            freq: 466.16,
+            type: 'black'
+        },
+        {
+            key: 'm',
+            note: 'B4',
+            freq: 493.88,
+            type: 'white'
+        },
+        // Octave 2 (C5 ~ B5)
+        {
+            key: 'q',
+            note: 'C5',
+            freq: 523.25,
+            type: 'white'
+        },
+        {
+            key: '2',
+            note: 'C#5',
+            freq: 554.37,
+            type: 'black'
+        },
+        {
+            key: 'w',
+            note: 'D5',
+            freq: 587.33,
+            type: 'white'
+        },
+        {
+            key: '3',
+            note: 'D#5',
+            freq: 622.25,
+            type: 'black'
+        },
+        {
+            key: 'e',
+            note: 'E5',
+            freq: 659.25,
+            type: 'white'
+        },
+        {
+            key: 'r',
+            note: 'F5',
+            freq: 698.46,
+            type: 'white'
+        },
+        {
+            key: '5',
+            note: 'F#5',
+            freq: 739.99,
+            type: 'black'
+        },
+        {
+            key: 't',
+            note: 'G5',
+            freq: 783.99,
+            type: 'white'
+        },
+        {
+            key: '6',
+            note: 'G#5',
+            freq: 830.61,
+            type: 'black'
+        },
+        {
+            key: 'y',
+            note: 'A5',
+            freq: 880.00,
+            type: 'white'
+        },
+        {
+            key: '7',
+            note: 'A#5',
+            freq: 932.33,
+            type: 'black'
+        },
+        {
+            key: 'u',
+            note: 'B5',
+            freq: 987.77,
+            type: 'white'
+        }
+    ];
+    // 4. 피아노 바디(Casing) 모델링
+    const pianoGroup = new THREE.Group();
+    scene.add(pianoGroup);
+    const casingMat = new THREE.MeshStandardMaterial({
+        color: 0x111111,
+        roughness: 0.5,
+        metalness: 0.8
+    });
+    // 하단 받침대
+    const baseGeo = new THREE.BoxGeometry(16, 0.5, 6.5);
+    const baseMesh = new THREE.Mesh(baseGeo, casingMat);
+    baseMesh.position.set(0, -0.25, 0.75);
+    baseMesh.castShadow = true;
+    baseMesh.receiveShadow = true;
+    pianoGroup.add(baseMesh);
+    // 뒷면 백보드
+    const backGeo = new THREE.BoxGeometry(16, 2, 1);
+    const backMesh = new THREE.Mesh(backGeo, casingMat);
+    backMesh.position.set(0, 1, -2);
+    backMesh.castShadow = true;
+    pianoGroup.add(backMesh);
+    // 좌우 사이드 패널
+    const sideGeo = new THREE.BoxGeometry(0.5, 2, 6.5);
+    const leftSide = new THREE.Mesh(sideGeo, casingMat);
+    leftSide.position.set(-7.75, 1, 0.75);
+    pianoGroup.add(leftSide);
+    const rightSide = new THREE.Mesh(sideGeo, casingMat);
+    rightSide.position.set(7.75, 1, 0.75);
+    pianoGroup.add(rightSide);
+    // 5. 건반 모델링
+    const keysGroup = new THREE.Group();
+    pianoGroup.add(keysGroup);
+    const keysMeshMap = {};
+    const whiteMat = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.2
+    });
+    const blackMat = new THREE.MeshStandardMaterial({
+        color: 0x1a1a1a,
+        roughness: 0.3
+    });
+    const highlightMat = new THREE.MeshStandardMaterial({
+        color: 0x88ff88,
+        emissive: 0x4caf50,
+        emissiveIntensity: 0.8
+    });
+    const totalWhiteKeys = notes.filter(n => n.type === 'white').length;
+    let whiteKeyOffset = -(totalWhiteKeys * 1) / 2 + 0.5; // 건반 전체를 중앙 정렬
+    notes.forEach(data => {
+        let width, height, depth, xPos, yPos, zPos, material;
+        if (data.type === 'white') {
+            width = 0.9;
+            height = 0.6;
+            depth = 5;
+            xPos = whiteKeyOffset;
+            yPos = height / 2;
+            zPos = 0.5;
+            material = whiteMat.clone();
+            whiteKeyOffset += 1;
+        } else {
+            width = 0.5;
+            height = 0.5;
+            depth = 3.2;
+            xPos = whiteKeyOffset - 0.5;
+            yPos = height / 2 + 0.3;
+            zPos = -0.4;
+            material = blackMat.clone();
+        }
+        const geometry = new THREE.BoxGeometry(width, height, depth);
+        geometry.translate(0, 0, depth / 2); // 회전 축(피벗)을 건반 뒤쪽으로 설정
+        const mesh = new THREE.Mesh(geometry, material);
+        mesh.position.set(xPos, yPos, zPos - depth / 2);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        mesh.userData = {
+            originalMat: material,
+            keyData: data,
+            isPressed: false
+        };
+        keysGroup.add(mesh);
+        keysMeshMap[data.key] = mesh;
+    });
+    // 6. 파티클 시스템 셋업
+    const particles = [];
+    const particleGeo = new THREE.BoxGeometry(0.1, 0.1, 0.1);
+
+    function spawnParticles(position, colorHex) {
+        const particleMat = new THREE.MeshBasicMaterial({
+            color: colorHex,
+            transparent: true,
+            opacity: 1,
+            blending: THREE.AdditiveBlending
+        });
+        for (let i = 0; i < 8; i++) {
+            const particle = new THREE.Mesh(particleGeo, particleMat);
+            // 건반 앞쪽 위치에서 생성
+            particle.position.copy(position);
+            particle.position.y += 0.5;
+            particle.position.z += 2;
+            // 무작위 위쪽 방향 속도
+            const velocity = new THREE.Vector3(
+                (Math.random() - 0.5) * 0.1,
+                Math.random() * 0.15 + 0.05,
+                (Math.random() - 0.5) * 0.1
+            );
+            scene.add(particle);
+            particles.push({
+                mesh: particle,
+                velocity: velocity,
+                life: 1.0
+            });
+        }
+    }
+    // 7. 타건 및 상호작용 제어
+    function pressKey(mesh) {
+        if (mesh.userData.isPressed) return;
+        mesh.userData.isPressed = true;
+        mesh.material = highlightMat;
+        mesh.rotation.x = -Math.PI / 24; // 건반 눌림 회전
+        // 파티클 생성
+        spawnParticles(mesh.position, 0x4caf50);
+    }
+
+    function releaseKey(mesh) {
+        if (!mesh.userData.isPressed) return;
+        mesh.userData.isPressed = false;
+        mesh.material = mesh.userData.originalMat;
+        mesh.rotation.x = 0;
+    }
+    // 키보드 이벤트
+    document.addEventListener('keydown', (e) => {
+        const key = e.key.toLowerCase();
+        const mesh = keysMeshMap[key];
+        if (mesh && !e.repeat) { // 꾹 누르고 있을 때 중복 실행 방지
+            playNote(key, mesh.userData.keyData.freq);
+            pressKey(mesh);
+        }
+    });
+    document.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        const mesh = keysMeshMap[key];
+        if (mesh) {
+            stopNote(key);
+            releaseKey(mesh);
+        }
+    });
+    // 마우스(Raycaster) 이벤트
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    let activeMouseMeshes = []; // 드래그 긁기 지원을 위한 배열
+    document.addEventListener('mousedown', handleMouse);
+    document.addEventListener('mousemove', (e) => {
+        if (e.buttons === 1) handleMouse(e);
+    });
+
+    function handleMouse(e) {
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+        const intersects = raycaster.intersectObjects(keysGroup.children);
+        // 마우스가 건반 위를 벗어나면 릴리즈 처리
+        activeMouseMeshes.forEach(mesh => {
+            if (intersects.length === 0 || intersects[0].object !== mesh) {
+                stopNote(mesh.userData.keyData.key);
+                releaseKey(mesh);
+            }
+        });
+        activeMouseMeshes = [];
+        // 마우스가 새로운 건반 위에 있으면 프레스 처리
+        if (intersects.length > 0) {
+            const mesh = intersects[0].object;
+            const key = mesh.userData.keyData.key;
+            playNote(key, mesh.userData.keyData.freq);
+            pressKey(mesh);
+            activeMouseMeshes.push(mesh);
+        }
+    }
+    document.addEventListener('mouseup', () => {
+        activeMouseMeshes.forEach(mesh => {
+            stopNote(mesh.userData.keyData.key);
+            releaseKey(mesh);
+        });
+        activeMouseMeshes = [];
+    });
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    // 8. 렌더 루프
+    function animate() {
+        requestAnimationFrame(animate);
+        controls.update();
+        // 파티클 애니메이션 업데이트
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const p = particles[i];
+            p.mesh.position.add(p.velocity);
+            p.mesh.rotation.x += 0.1;
+            p.mesh.rotation.y += 0.1;
+            p.life -= 0.02; // 수명 감소
+            p.mesh.material.opacity = p.life;
+            if (p.life <= 0) {
+                scene.remove(p.mesh);
+                p.mesh.material.dispose();
+                p.mesh.geometry.dispose();
+                particles.splice(i, 1);
+            }
+        }
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+
+</html>

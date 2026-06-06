@@ -20,7 +20,12 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "WARP SPACE", url: "Interactive-9.html", isReady: true },
         { title: "NEON DRIVE", url: "Interactive-10.html", isReady: true },
         { title: "바람", url: "Interactive-11.html", isReady: true },
-        { title: "Upcoming Interactive 4", url: "", isReady: false }
+        { title: "심연의 은하계", url: "Interactive-12.html", isReady: true },
+        { title: "액체 금속 메타볼", url: "Interactive-13.html", isReady: true },
+        { title: "3D 파티클 피아노", url: "Interactive-14.html", isReady: true },
+        { title: "원소 입자 샌드박스", url: "Interactive-15.html", isReady: true },
+
+        { title: "Upcoming Interactive", url: "", isReady: false }
     ];
 
     const theta = 360 / TOTAL_CARDS;
