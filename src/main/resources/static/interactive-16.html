@@ -1,0 +1,126 @@
+<html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>크리에이티브 코딩: 무지개 파티클</title>
+    <style>
+        /* 기본 여백을 없애고 화면을 꽉 채웁니다 */
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            /* 어두운 배경에서 색상이 더 화려하게 보입니다 */
+            font-family: sans-serif;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        /* 간단한 설명 텍스트를 위에 띄웁니다 */
+        #info {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            pointer-events: none;
+            /* 텍스트 위에서도 마우스 이벤트가 캔버스로 전달되게 합니다 */
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="info">
+    <h2>무지개 파티클 인터랙션</h2>
+    <p>화면 위에서 마우스를 움직여보세요!</p>
+</div>
+
+<canvas id="myCanvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('myCanvas');
+    const ctx = canvas.getContext('2d');
+    // 브라우저 창 크기에 맞게 캔버스 크기 조정
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const particles = [];
+    let hue = 0; // 무지개 색상을 만들기 위한 변수 (0~360)
+    // 마우스 위치 객체
+    const mouse = {
+        x: undefined,
+        y: undefined
+    };
+    // 마우스가 움직일 때마다 위치 업데이트
+    window.addEventListener('mousemove', function(event) {
+        mouse.x = event.x;
+        mouse.y = event.y;
+        // 마우스가 움직일 때마다 파티클을 5개씩 생성
+        for (let i = 0; i < 5; i++) {
+            particles.push(new Particle());
+        }
+    });
+    // 파티클 (입자) 클래스 설계도
+    class Particle {
+        constructor() {
+            this.x = mouse.x;
+            this.y = mouse.y;
+            // 사방으로 흩어지는 랜덤한 속도와 방향
+            this.speedX = Math.random() * 3 - 1.5;
+            this.speedY = Math.random() * 3 - 1.5;
+            // 초기 크기
+            this.size = Math.random() * 15 + 1;
+            // 생성될 때의 무지개 색상 저장
+            this.color = 'hsl(' + hue + ', 100%, 50%)';
+        }
+        // 파티클의 위치와 크기를 업데이트
+        update() {
+            this.x += this.speedX;
+            this.y += this.speedY;
+            // 점점 크기가 작아지게 만듭니다
+            if (this.size > 0.2) this.size -= 0.1;
+        }
+        // 화면에 파티클을 그리기
+        draw() {
+            ctx.fillStyle = this.color;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    // 파티클 배열을 관리하는 함수
+    function handleParticles() {
+        for (let i = 0; i < particles.length; i++) {
+            particles[i].update();
+            particles[i].draw();
+            // 파티클이 너무 작아지면 배열에서 삭제 (메모리 관리)
+            if (particles[i].size <= 0.3) {
+                particles.splice(i, 1);
+                i--;
+            }
+        }
+    }
+    // 끝없이 실행되는 애니메이션 루프
+    function animate() {
+        // 이전 프레임을 살짝 투명한 검은색으로 덮어 꼬리(잔상) 효과를 만듭니다
+        ctx.fillStyle = 'rgba(17, 17, 17, 0.1)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        handleParticles();
+        // 색상 값을 계속 증가시켜 무지개빛으로 변하게 합니다
+        hue += 2;
+        // 다음 프레임 요청
+        requestAnimationFrame(animate);
+    }
+    // 애니메이션 시작
+    animate();
+    // 창 크기가 바뀔 때 캔버스 크기도 다시 맞춤
+    window.addEventListener('resize', function() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    });
+</script>
+</body>
+
+</html>
