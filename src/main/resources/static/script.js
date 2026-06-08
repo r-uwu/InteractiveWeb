@@ -4,10 +4,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const TOTAL_CARDS = 30;
     const CARD_WIDTH = 280;
-    const BASE_SPEED = 0.03;
+    const BASE_SPEED = 0.003;
     const LIVE_RANGE = 2;
 
-    /* Project Data setup omitted for brevity, assume projectData array exists here */
     const projectData = [
         { title: "삐약이 간식 시간", url: "Interactive-1.html", isReady: true },
         { title: "Kinetic Mesh", url: "Interactive-2.html", isReady: true },
@@ -25,7 +24,6 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "3D 파티클 피아노", url: "Interactive-14.html", isReady: true },
         { title: "원소 입자 샌드박스", url: "Interactive-15.html", isReady: true },
         { title: "포인터 파티클과 잔상", url: "Interactive-16.html", isReady: true },
-
         { title: "Upcoming Interactive", url: "", isReady: false }
     ];
 
@@ -33,23 +31,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const radius = Math.round((CARD_WIDTH / 2) / Math.tan(Math.PI / TOTAL_CARDS));
 
     let rotationAngle = 0;
-
-    /* Variables for robust playback control */
     let speedMultiplier = 1;
     let isManuallyPaused = false;
     let isHoverPaused = false;
+    let isGridMode = false;
+    let lastTime = 0;
     let animationFrameId;
 
     const cardElements = [];
 
-    /* Control DOM Elements */
     const btnPrev = document.getElementById('btn-prev');
     const btnPlay = document.getElementById('btn-play');
     const btnNext = document.getElementById('btn-next');
+    const btnGrid = document.getElementById('btn-grid');
     const iconPause = document.getElementById('icon-pause');
     const iconPlay = document.getElementById('icon-play');
 
-    /* Card Generation Loop */
+    /* Initialize Cards */
     for (let i = 0; i < TOTAL_CARDS; i++) {
         const cardAngle = theta * i;
         const project = projectData[i] || { title: `Project ${i + 1}`, isReady: false };
@@ -93,7 +91,6 @@ document.addEventListener('DOMContentLoaded', () => {
             `;
         }
 
-        /* Update hover logic to use specific hover state */
         card.addEventListener('mouseenter', () => isHoverPaused = true);
         card.addEventListener('mouseleave', () => isHoverPaused = false);
 
@@ -101,7 +98,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cardElements.push(card);
     }
 
-    /* Playback Control Logic */
+    /* Control Logics */
     function updatePlayIcon() {
         if (isManuallyPaused) {
             iconPause.style.display = 'none';
@@ -113,54 +110,71 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function updateSpeedButtonUI() {
-        btnPrev.classList.toggle('active-speed', speedMultiplier === -4);
-        btnNext.classList.toggle('active-speed', speedMultiplier === 4);
+        btnPrev.classList.toggle('active-speed', speedMultiplier < -1);
+        btnNext.classList.toggle('active-speed', speedMultiplier > 1);
     }
 
     btnPlay.addEventListener('click', () => {
         isManuallyPaused = !isManuallyPaused;
-
-        /* Reset to 1x speed if unpaused from a fast forward/rewind state */
         if (!isManuallyPaused && speedMultiplier !== 1 && speedMultiplier !== -1) {
             speedMultiplier = speedMultiplier > 0 ? 1 : -1;
         }
-
         updatePlayIcon();
         updateSpeedButtonUI();
     });
 
     btnPrev.addEventListener('click', () => {
-        /* Toggle logic: Normal Reverse (-1) -> Fast Reverse (-4) -> Normal Reverse (-1) */
-        if (speedMultiplier > 0) {
-            speedMultiplier = -1;
-        } else if (speedMultiplier === -1) {
-            speedMultiplier = -4;
-        } else {
-            speedMultiplier = -1;
-        }
+        if (speedMultiplier > 0) speedMultiplier = -1;
+        else if (speedMultiplier === -1) speedMultiplier = -2;
+        else if (speedMultiplier === -2) speedMultiplier = -4;
+        else speedMultiplier = -1;
+
         isManuallyPaused = false;
         updatePlayIcon();
         updateSpeedButtonUI();
     });
 
     btnNext.addEventListener('click', () => {
-        /* Toggle logic: Normal Forward (1) -> Fast Forward (4) -> Normal Forward (1) */
-        if (speedMultiplier < 0) {
-            speedMultiplier = 1;
-        } else if (speedMultiplier === 1) {
-            speedMultiplier = 4;
-        } else {
-            speedMultiplier = 1;
-        }
+        if (speedMultiplier < 0) speedMultiplier = 1;
+        else if (speedMultiplier === 1) speedMultiplier = 2;
+        else if (speedMultiplier === 2) speedMultiplier = 4;
+        else speedMultiplier = 1;
+
         isManuallyPaused = false;
         updatePlayIcon();
         updateSpeedButtonUI();
     });
 
-    /* Live Iframe Update Logic */
-    function updateLiveIframes() {
-        let centerIndex = Math.round((-rotationAngle % 360) / theta);
+    btnGrid.addEventListener('click', () => {
+        isGridMode = !isGridMode;
+        document.body.classList.toggle('grid-view', isGridMode);
 
+        if (isGridMode) {
+            btnGrid.classList.add('active-speed');
+            cardElements.forEach(card => {
+                if (card.dataset.isReady === "true") {
+                    const container = card.querySelector('.iframe-container');
+                    const placeholder = card.querySelector('.loading-placeholder');
+                    container.innerHTML = '';
+                    placeholder.style.visibility = 'visible';
+                    placeholder.style.opacity = '1';
+                    card.classList.remove('is-live');
+                }
+            });
+        } else {
+            btnGrid.classList.remove('active-speed');
+            cardElements.forEach((card, i) => {
+                card.style.transform = `rotateY(${theta * i}deg) translateZ(${radius}px)`;
+            });
+            updateLiveIframes();
+        }
+    });
+
+    /* Live Preview Loader */
+    function updateLiveIframes() {
+        if (isGridMode) return;
+
+        let centerIndex = Math.round((-rotationAngle % 360) / theta);
         if (centerIndex < 0) centerIndex += TOTAL_CARDS;
         if (centerIndex >= TOTAL_CARDS) centerIndex -= TOTAL_CARDS;
 
@@ -185,15 +199,27 @@ document.addEventListener('DOMContentLoaded', () => {
                     iframe.scrolling = "no";
                     iframe.frameBorder = "0";
 
+                    /* Standard onload trigger */
                     iframe.onload = () => {
                         placeholder.style.opacity = '0';
+                        setTimeout(() => { placeholder.style.visibility = 'hidden'; }, 300);
                     };
+
+                    /* Fallback for local CORS blocking */
+                    setTimeout(() => {
+                        if (placeholder.style.opacity !== '0') {
+                            placeholder.style.opacity = '0';
+                            setTimeout(() => { placeholder.style.visibility = 'hidden'; }, 300);
+                        }
+                    }, 1500);
+
                     container.appendChild(iframe);
                     card.classList.add('is-live');
                 }
             } else {
                 if (hasIframe) {
                     container.innerHTML = '';
+                    placeholder.style.visibility = 'visible';
                     placeholder.style.opacity = '1';
                     card.classList.remove('is-live');
                 }
@@ -201,12 +227,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    /* Animation Loop */
-    function animate() {
-        /* Rotate only if neither manually paused nor hovered */
-        if (!isManuallyPaused && !isHoverPaused) {
-            /* Apply speed multiplier to rotation speed */
-            rotationAngle -= (BASE_SPEED * speedMultiplier);
+    /* Animation Framework */
+    function animate(currentTime) {
+        if (!lastTime) lastTime = currentTime;
+        const deltaTime = currentTime - lastTime;
+        lastTime = currentTime;
+
+        if (!isManuallyPaused && !isHoverPaused && !isGridMode) {
+            rotationAngle -= (BASE_SPEED * speedMultiplier * deltaTime);
             carousel.style.transform = `translateZ(${-radius}px) rotateY(${rotationAngle}deg)`;
             updateLiveIframes();
         }
@@ -215,8 +243,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     carousel.style.transform = `translateZ(${-radius}px) rotateY(0deg)`;
     updateLiveIframes();
-    animate();
+    animationFrameId = requestAnimationFrame(animate);
 
+    /* Click and Bfcache Navigation Control */
     function handleCardClick(targetUrl) {
         if (overlay.classList.contains('active')) return;
         overlay.classList.add('active');
@@ -224,4 +253,15 @@ document.addEventListener('DOMContentLoaded', () => {
             window.location.href = targetUrl;
         }, 600);
     }
+
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            overlay.classList.remove('active');
+            isManuallyPaused = false;
+            speedMultiplier = 1;
+            lastTime = 0;
+            updatePlayIcon();
+            updateSpeedButtonUI();
+        }
+    });
 });

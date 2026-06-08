@@ -360,3 +360,49 @@ body {
     background: rgba(79, 172, 254, 0.15);
     box-shadow: 0 0 10px rgba(79, 172, 254, 0.2);
 }
+
+/* 12. Grid View Mode Overrides */
+body.grid-view {
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+
+body.grid-view .scene {
+    perspective: none;
+    height: auto;
+    min-height: 100vh;
+}
+
+body.grid-view .scene::before {
+    display: none;
+}
+
+body.grid-view .carousel {
+    position: relative;
+    top: 0;
+    left: 0;
+    margin: 0 auto;
+    width: 100%;
+    max-width: 1400px;
+    height: auto;
+    transform: none !important;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 30px;
+    padding: 150px 50px 150px;
+    justify-items: center;
+}
+
+body.grid-view .card {
+    position: relative;
+    transform: none !important;
+    opacity: 1 !important;
+    pointer-events: auto;
+    width: 100%;
+    max-width: 280px;
+    height: 420px;
+}
+
+body.grid-view .card.not-ready {
+    opacity: 0.6 !important;
+}

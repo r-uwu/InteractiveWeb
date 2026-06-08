@@ -4,18 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Interactive Portfolio</title>
-
-    <!-- Premium Web Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
-
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<!-- Cinematic Noise Overlay -->
 <div class="noise-overlay"></div>
 
-<!-- Global Page Header -->
 <header class="page-header">
     <div class="header-subtitle">SEO-HUI'S ARCHIVE</div>
     <h1 class="header-title">INTERACTIVE<br>EXPERIENCES</h1>
@@ -24,12 +19,9 @@
 <div class="transition-overlay" id="overlay"></div>
 
 <main class="scene">
-    <div class="carousel" id="carousel">
-        <!-- Cards injected via JS -->
-    </div>
+    <div class="carousel" id="carousel"></div>
 </main>
 
-<!-- Media Controls -->
 <div class="carousel-controls">
     <button id="btn-prev" class="control-btn" aria-label="Rewind">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
@@ -37,11 +29,9 @@
         </svg>
     </button>
     <button id="btn-play" class="control-btn" aria-label="Play/Pause">
-        <!-- Pause Icon (Default) -->
         <svg id="icon-pause" viewBox="0 0 24 24" width="28" height="28" fill="currentColor">
             <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
         </svg>
-        <!-- Play Icon (Hidden by Default) -->
         <svg id="icon-play" viewBox="0 0 24 24" width="28" height="28" fill="currentColor" style="display: none;">
             <path d="M5 3l14 9-14 9V3z"/>
         </svg>
@@ -49,6 +39,14 @@
     <button id="btn-next" class="control-btn" aria-label="Fast Forward">
         <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
             <path d="M4 18l8.5-6L4 6v12zm9-12v12l8.5-6L13 6z"/>
+        </svg>
+    </button>
+    <button id="btn-grid" class="control-btn" aria-label="Toggle Grid View">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
         </svg>
     </button>
 </div>
