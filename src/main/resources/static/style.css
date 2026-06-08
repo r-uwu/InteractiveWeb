@@ -399,10 +399,14 @@ body.grid-view .card {
     opacity: 1 !important;
     pointer-events: auto;
     width: 100%;
-    max-width: 280px;
-    height: 420px;
+    max-width: 520px;
+    height: 320px;
 }
 
-body.grid-view .card.not-ready {
-    opacity: 0.6 !important;
+/* 12. Grid View Mode Overrides */
+body.grid-view {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: auto;
+    min-height: 100vh;
 }

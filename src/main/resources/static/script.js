@@ -7,6 +7,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const BASE_SPEED = 0.003;
     const LIVE_RANGE = 2;
 
+    let gridObserver;
+
     const projectData = [
         { title: "삐약이 간식 시간", url: "Interactive-1.html", isReady: true },
         { title: "Kinetic Mesh", url: "Interactive-2.html", isReady: true },
@@ -37,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let isGridMode = false;
     let lastTime = 0;
     let animationFrameId;
+    let savedScrollPosition = 0;
 
     const cardElements = [];
 
@@ -114,6 +117,58 @@ document.addEventListener('DOMContentLoaded', () => {
         btnNext.classList.toggle('active-speed', speedMultiplier > 1);
     }
 
+    function initGridObserver() {
+        if (gridObserver) gridObserver.disconnect();
+        gridObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                const card = entry.target;
+                if (card.dataset.isReady !== "true") return;
+
+                const container = card.querySelector('.iframe-container');
+                const placeholder = card.querySelector('.loading-placeholder');
+                const hasIframe = container.querySelector('iframe') !== null;
+
+                if (entry.isIntersecting) {
+                    /* Load iframe when card enters viewport */
+                    if (!hasIframe) {
+                        const iframe = document.createElement('iframe');
+                        iframe.src = card.dataset.src;
+                        iframe.scrolling = "no";
+                        iframe.frameBorder = "0";
+
+                        iframe.onload = () => {
+                            placeholder.style.opacity = '0';
+                            setTimeout(() => { placeholder.style.visibility = 'hidden'; }, 300);
+                        };
+
+                        /* Fallback for local testing */
+                        setTimeout(() => {
+                            if (placeholder.style.opacity !== '0') {
+                                placeholder.style.opacity = '0';
+                                setTimeout(() => { placeholder.style.visibility = 'hidden'; }, 300);
+                            }
+                        }, 1500);
+
+                        container.appendChild(iframe);
+                        card.classList.add('is-live');
+                    }
+                } else {
+                    /* Remove iframe when card leaves viewport to free memory */
+                    if (hasIframe) {
+                        container.innerHTML = '';
+                        placeholder.style.visibility = 'visible';
+                        placeholder.style.opacity = '1';
+                        card.classList.remove('is-live');
+                    }
+                }
+            });
+        }, {
+            root: null,
+            rootMargin: '200px', /* Pre-load slightly before coming into actual view */
+            threshold: 0.1
+        });
+    }
+
     btnPlay.addEventListener('click', () => {
         isManuallyPaused = !isManuallyPaused;
         if (!isManuallyPaused && speedMultiplier !== 1 && speedMultiplier !== -1) {
@@ -147,10 +202,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     btnGrid.addEventListener('click', () => {
         isGridMode = !isGridMode;
-        document.body.classList.toggle('grid-view', isGridMode);
 
         if (isGridMode) {
             btnGrid.classList.add('active-speed');
+            document.body.classList.add('grid-view');
+
+            /* Clear all existing iframes from 3D mode first */
             cardElements.forEach(card => {
                 if (card.dataset.isReady === "true") {
                     const container = card.querySelector('.iframe-container');
@@ -161,8 +218,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     card.classList.remove('is-live');
                 }
             });
+
+            /* Start Intersection Observer for Grid Mode */
+            if (!gridObserver) initGridObserver();
+            cardElements.forEach(card => {
+                if (card.dataset.isReady === "true") {
+                    gridObserver.observe(card);
+                }
+            });
+
+            requestAnimationFrame(() => {
+                window.scrollTo(0, savedScrollPosition);
+            });
+
         } else {
+            //현재 그리드 뷰의 스크롤 위치 저장
+            savedScrollPosition = window.scrollY;
+
             btnGrid.classList.remove('active-speed');
+            document.body.classList.remove('grid-view');
+
+            window.scrollTo(0, 0);
+
+            /* Stop Observer when returning to 3D mode */
+            if (gridObserver) gridObserver.disconnect();
+
+            /* Reset positions for 3D */
             cardElements.forEach((card, i) => {
                 card.style.transform = `rotateY(${theta * i}deg) translateZ(${radius}px)`;
             });
