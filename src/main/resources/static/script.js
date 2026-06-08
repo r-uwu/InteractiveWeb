@@ -26,6 +26,9 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "3D 파티클 피아노", url: "Interactive-14.html", isReady: true },
         { title: "원소 입자 샌드박스", url: "Interactive-15.html", isReady: true },
         { title: "포인터 파티클과 잔상", url: "Interactive-16.html", isReady: true },
+        { title: "익스트림 블룸", url: "Interactive-17.html", isReady: true },
+        { title: "라인 아트", url: "Interactive-18.html", isReady: true },
+        { title: "자라나는 트라이앵글", url: "Interactive-19.html", isReady: true },
         { title: "Upcoming Interactive", url: "", isReady: false }
     ];
 

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+
+    <title>Living Line Art</title>
+
+    <style>
+        html,body{
+            margin:0;
+            width:100%;
+            height:100%;
+            overflow:hidden;
+            background:#faf8f4;
+            font-family:sans-serif;
+        }
+
+        canvas{
+            display:block;
+            width:100%;
+            height:100%;
+        }
+
+        .info{
+            position:fixed;
+            left:32px;
+            top:32px;
+            color:#111;
+            z-index:10;
+            user-select:none;
+        }
+
+        .info h1{
+            margin:0;
+            font-size:40px;
+            font-weight:200;
+        }
+
+        .info p{
+            opacity:.55;
+        }
+
+        @media (max-width:560px){
+            .info{
+                display:none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="info">
+    <h1>Living Line Art</h1>
+    <p>Move · Click to evolve</p>
+</div>
+
+<canvas id="c"></canvas>
+
+<script>
+
+    const canvas = document.getElementById("c");
+    const ctx = canvas.getContext("2d");
+
+    let w,h;
+
+    function resize(){
+        w=canvas.width=innerWidth;
+        h=canvas.height=innerHeight;
+    }
+    resize();
+    addEventListener("resize",resize);
+
+    let seed=Math.random()*1000;
+
+    const mouse={
+        x:w/2,
+        y:h/2
+    };
+
+    addEventListener("mousemove",e=>{
+        mouse.x=e.clientX;
+        mouse.y=e.clientY;
+    });
+
+    addEventListener("click",()=>{
+        seed=Math.random()*5000;
+        init();
+    });
+
+    function noise(x,y){
+
+        return Math.sin(
+            x*0.006+
+            Math.cos(y*0.004)+
+            seed
+        );
+    }
+
+    class Brush{
+
+        constructor(){
+
+            this.x=Math.random()*w;
+            this.y=Math.random()*h;
+
+            this.life=
+                150+
+                Math.random()*250;
+
+            this.width=
+                .3+
+                Math.random()*1.2;
+
+            this.hue=
+                Math.random()*40+180;
+        }
+
+        update(){
+
+            let dx=
+                mouse.x-this.x;
+
+            let dy=
+                mouse.y-this.y;
+
+            let dist=
+                Math.hypot(dx,dy);
+
+            let influence=
+                Math.max(
+                    0,
+                    1-dist/250
+                );
+
+            let angle=
+                noise(this.x,this.y)*6;
+
+            angle+=
+                Math.atan2(dy,dx)
+                *influence
+                *0.8;
+
+            let px=this.x;
+            let py=this.y;
+
+            this.x+=Math.cos(angle)*2;
+            this.y+=Math.sin(angle)*2;
+
+            ctx.beginPath();
+
+            ctx.moveTo(px,py);
+            ctx.lineTo(this.x,this.y);
+
+            ctx.strokeStyle=
+                `hsla(${this.hue},
+        80%,
+        40%,
+        .04)`;
+
+            ctx.lineWidth=this.width;
+
+            ctx.stroke();
+
+            this.life--;
+
+            if(
+                this.life<0 ||
+                this.x<0 ||
+                this.x>w ||
+                this.y<0 ||
+                this.y>h
+            ){
+                Object.assign(
+                    this,
+                    new Brush()
+                );
+            }
+        }
+    }
+
+    const brushes=[];
+
+    function init(){
+
+        ctx.fillStyle="#faf8f4";
+        ctx.fillRect(0,0,w,h);
+
+        brushes.length=0;
+
+        for(let i=0;i<2500;i++){
+            brushes.push(
+                new Brush()
+            );
+        }
+    }
+
+    init();
+
+    function animate(){
+
+        for(let i=0;i<brushes.length;i++){
+            brushes[i].update();
+        }
+
+        requestAnimationFrame(
+            animate
+        );
+    }
+
+    animate();
+
+</script>
+</body>
+</html>

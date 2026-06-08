@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Extreme Bloom Flow Field</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; }
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; width: 300px;
+            background: rgba(0, 0, 0, 0.8); color: #fff;
+            padding: 20px; border-radius: 8px; font-family: sans-serif;
+            z-index: 100; border: 1px solid #333;
+        }
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px; }
+        input[type=range] { width: 100%; cursor: pointer; }
+        @media (max-width: 560px) { #ui-layer { display: none; } }
+    </style>
+</head>
+<body>
+<div id="ui-layer">
+    <h2>익스트림 블룸 옵션</h2>
+    <div class="control-group">
+        <label><span>흐름 속도</span> <span id="val-speed">0.8</span></label>
+        <input type="range" id="inp-speed" min="0.1" max="3.0" step="0.1" value="0.8">
+    </div>
+    <div class="control-group">
+        <label><span>공간 왜곡</span> <span id="val-scale">1.5</span></label>
+        <input type="range" id="inp-scale" min="0.5" max="5.0" step="0.1" value="1.5">
+    </div>
+    <div class="control-group">
+        <label><span>초강력 척력</span> <span id="val-repel">30.0</span></label>
+        <input type="range" id="inp-repel" min="0.0" max="100.0" step="1.0" value="30.0">
+    </div>
+    <div class="control-group">
+        <label><span>블룸 강도</span> <span id="val-bloom">1.5</span></label>
+        <input type="range" id="inp-bloom" min="0.0" max="3.0" step="0.1" value="1.5">
+    </div>
+</div>
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+      }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 20;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+
+    // Post-processing
+    const composer = new EffectComposer(renderer);
+    composer.addPass(new RenderPass(scene, camera));
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+    composer.addPass(bloomPass);
+
+    // Shaders
+    const uniforms = {
+        uTime: { value: 0 },
+        uSpeed: { value: 0.8 },
+        uNoiseScale: { value: 1.5 },
+        uRepelStrength: { value: 30.0 },
+        uMousePos: { value: new THREE.Vector3(999, 999, 999) }
+    };
+
+    const geometry = new THREE.BufferGeometry();
+    const count = 300000;
+    const pos = new Float32Array(count * 3);
+    for(let i=0; i<count*3; i++) pos[i] = (Math.random()-0.5) * 40;
+    geometry.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    geometry.setAttribute('aInitialPos', new THREE.BufferAttribute(pos, 3));
+
+    const material = new THREE.ShaderMaterial({
+        uniforms,
+        vertexShader: `
+                uniform float uTime, uSpeed, uNoiseScale, uRepelStrength;
+                uniform vec3 uMousePos;
+                attribute vec3 aInitialPos;
+                varying vec3 vColor;
+                void main() {
+                    vec3 p = aInitialPos;
+                    p += vec3(sin(p.y*uNoiseScale+uTime*uSpeed), sin(p.z*uNoiseScale+uTime*uSpeed), sin(p.x*uNoiseScale+uTime*uSpeed)) * 2.0;
+                    float d = distance(p, uMousePos);
+                    float f = smoothstep(8.0, 0.0, d);
+                    p += normalize(p - uMousePos) * f * uRepelStrength;
+                    vColor = mix(vec3(0.0, 0.6, 1.0), vec3(1.0, 0.2, 0.5), f);
+                    vec4 mv = modelViewMatrix * vec4(p, 1.0);
+                    gl_Position = projectionMatrix * mv;
+                    gl_PointSize = 2.0 / -mv.z;
+                }
+            `,
+        fragmentShader: `
+                varying vec3 vColor;
+                void main() { gl_FragColor = vec4(vColor, 1.0); }
+            `,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
+    });
+
+    scene.add(new THREE.Points(geometry, material));
+
+    // Interaction
+    document.addEventListener('mousemove', (e) => {
+        const v = new THREE.Vector3((e.clientX/window.innerWidth)*2-1, -(e.clientY/window.innerHeight)*2+1, 0).unproject(camera);
+        uniforms.uMousePos.value.set(v.x*20, v.y*20, 0);
+    });
+
+    // UI
+    const setup = (id, key, factor=1) => {
+        document.getElementById(id).addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById(id.replace('inp-', 'val-')).textContent = val;
+            if(key === 'bloom') bloomPass.strength = val;
+            else uniforms[key].value = val;
+        });
+    };
+    setup('inp-speed', 'uSpeed');
+    setup('inp-scale', 'uNoiseScale');
+    setup('inp-repel', 'uRepelStrength');
+    setup('inp-bloom', 'bloom');
+
+    const clock = new THREE.Clock();
+    function animate() {
+        requestAnimationFrame(animate);
+        uniforms.uTime.value = clock.getElapsedTime();
+        composer.render();
+    }
+    animate();
+</script>
+</body>
+</html>
