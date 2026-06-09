@@ -29,6 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
         { title: "익스트림 블룸", url: "Interactive-17.html", isReady: true },
         { title: "라인 아트", url: "Interactive-18.html", isReady: true },
         { title: "자라나는 트라이앵글", url: "Interactive-19.html", isReady: true },
+        { title: "프렉탈 터널2", url: "Interactive-20.html", isReady: true },
+        { title: "절차적 행성 생성기", url: "Interactive-21.html", isReady: true },
         { title: "Upcoming Interactive", url: "", isReady: false }
     ];
 

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Infinite KIFS Fractal Tunnel</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; user-select: none; }
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; width: 300px;
+            background: rgba(5, 5, 10, 0.85); color: #fff;
+            padding: 20px; border-radius: 8px; font-family: monospace;
+            box-shadow: 0 4px 30px rgba(0, 255, 255, 0.1); z-index: 100;
+            border: 1px solid #00e5ff; backdrop-filter: blur(5px);
+        }
+        h2 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #00e5ff; padding-bottom: 10px; color: #00e5ff; text-transform: uppercase; letter-spacing: 1px; }
+        .instruction { font-size: 11px; line-height: 1.6; margin-bottom: 15px; color: #888; }
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px; color: #ccc; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #00e5ff; }
+
+        @media (max-width: 560px) {
+            #ui-layer { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div id="ui-layer">
+    <h2>KIFS Raymarching Tunnel</h2>
+    <div class="instruction">
+        SDF 기반의 무한 프랙탈 공간입니다.<br>
+        마우스를 움직여 터널의 비행 궤적을 제어하십시오.
+    </div>
+
+    <div class="control-group">
+        <label><span>비행 속도 (Speed)</span> <span id="val-speed">1.5</span></label>
+        <input type="range" id="inp-speed" min="0.1" max="5.0" step="0.1" value="1.5">
+    </div>
+    <div class="control-group">
+        <label><span>공간 왜곡 (Twist)</span> <span id="val-twist">0.2</span></label>
+        <input type="range" id="inp-twist" min="0.0" max="1.0" step="0.05" value="0.2">
+    </div>
+    <div class="control-group">
+        <label><span>색상 스펙트럼 (Color Shift)</span> <span id="val-color">0.0</span></label>
+        <input type="range" id="inp-color" min="0.0" max="6.28" step="0.1" value="0.0">
+    </div>
+</div>
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.150.1/build/three.module.js"
+      }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    document.body.appendChild(renderer.domElement);
+
+    const fragmentShader = `
+            uniform float uTime;
+            uniform vec2 uResolution;
+            uniform vec2 uMouse;
+            uniform float uSpeed;
+            uniform float uTwist;
+            uniform float uColorShift;
+
+            mat2 rot(float a) {
+                float s = sin(a), c = cos(a);
+                return mat2(c, -s, s, c);
+            }
+
+            float map(vec3 p) {
+                p.xy *= rot(p.z * uTwist);
+
+                vec3 q = p;
+                q.z = mod(q.z, 4.0) - 2.0;
+
+                for(int i = 0; i < 5; i++) {
+                    q = abs(q) - vec3(0.8, 0.5, 0.8);
+                    q.xy *= rot(0.5);
+                    q.xz *= rot(0.3);
+                }
+
+                float d1 = length(q.xy) - 0.1;
+                float d2 = length(q.xz) - 0.1;
+                return min(d1, d2);
+            }
+
+            void main() {
+                vec2 uv = (gl_FragCoord.xy - 0.5 * uResolution.xy) / uResolution.y;
+
+                vec3 ro = vec3(0.0, 0.0, uTime * uSpeed);
+                vec3 rd = normalize(vec3(uv, 0.8));
+
+                vec2 mouseOffset = (uMouse - 0.5) * 2.0;
+                rd.xy *= rot(mouseOffset.x * 0.8);
+                rd.xz *= rot(mouseOffset.y * 0.8);
+
+                vec3 col = vec3(0.0);
+                float t = 0.0;
+
+                for(int i = 0; i < 90; i++) {
+                    vec3 p = ro + rd * t;
+                    float d = map(p);
+
+                    vec3 glowColor = 0.5 + 0.5 * cos(uColorShift + p.z * 0.5 + vec3(0.0, 2.0, 4.0));
+
+                    col += glowColor * (0.012 / (abs(d) + 0.005));
+
+                    if(d < 0.001 || t > 40.0) break;
+
+                    t += d * 0.7;
+                }
+
+                col = pow(col, vec3(1.3));
+
+                float fog = exp(-0.02 * t);
+                col *= fog;
+
+                gl_FragColor = vec4(col, 1.0);
+            }
+        `;
+
+    const uniforms = {
+        uTime: { value: 0 },
+        uResolution: { value: new THREE.Vector2(window.innerWidth, window.innerHeight) },
+        uMouse: { value: new THREE.Vector2(0.5, 0.5) },
+        uSpeed: { value: 1.5 },
+        uTwist: { value: 0.2 },
+        uColorShift: { value: 0.0 }
+    };
+
+    const geometry = new THREE.PlaneGeometry(2, 2);
+    const material = new THREE.ShaderMaterial({
+        vertexShader: `
+                void main() {
+                    gl_Position = vec4(position, 1.0);
+                }
+            `,
+        fragmentShader,
+        uniforms
+    });
+
+    const mesh = new THREE.Mesh(geometry, material);
+    scene.add(mesh);
+
+    document.addEventListener('mousemove', (e) => {
+        uniforms.uMouse.value.x = e.clientX / window.innerWidth;
+        uniforms.uMouse.value.y = 1.0 - (e.clientY / window.innerHeight);
+    });
+
+    document.addEventListener('touchmove', (e) => {
+        uniforms.uMouse.value.x = e.touches[0].clientX / window.innerWidth;
+        uniforms.uMouse.value.y = 1.0 - (e.touches[0].clientY / window.innerHeight);
+    }, { passive: true });
+
+    const bindSlider = (id, uniformKey) => {
+        const el = document.getElementById(id);
+        const valDisplay = document.getElementById(id.replace('inp-', 'val-'));
+        el.addEventListener('input', () => {
+            valDisplay.textContent = el.value;
+            uniforms[uniformKey].value = parseFloat(el.value);
+        });
+    };
+
+    bindSlider('inp-speed', 'uSpeed');
+    bindSlider('inp-twist', 'uTwist');
+    bindSlider('inp-color', 'uColorShift');
+
+    window.addEventListener('resize', () => {
+        uniforms.uResolution.value.set(window.innerWidth, window.innerHeight);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    const clock = new THREE.Clock();
+    function animate() {
+        requestAnimationFrame(animate);
+        uniforms.uTime.value = clock.getElapsedTime();
+        renderer.render(scene, camera);
+    }
+    animate();
+</script>
+</body>
+</html>
