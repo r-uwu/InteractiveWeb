@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Cyberpunk Energy Core</title>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; user-select: none; }
+        #ui-layer {
+            position: absolute; top: 15px; left: 15px; width: 300px;
+            background: rgba(10, 10, 15, 0.85); color: #fff;
+            padding: 20px; border-radius: 8px; font-family: monospace;
+            box-shadow: 0 0 20px rgba(255, 0, 128, 0.3); z-index: 100;
+            border: 1px solid #ff007f; backdrop-filter: blur(5px);
+        }
+        h2 { margin-top: 0; font-size: 16px; border-bottom: 1px solid #ff007f; padding-bottom: 10px; color: #ff007f; text-transform: uppercase; letter-spacing: 2px; }
+        .instruction { font-size: 11px; line-height: 1.5; margin-bottom: 15px; color: #aaa; }
+        .control-group { margin-bottom: 15px; }
+        label { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 5px; color: #ddd; }
+        input[type=range] { width: 100%; cursor: pointer; accent-color: #ff007f; }
+
+        @media (max-width: 560px) {
+            #ui-layer { display: none; }
+        }
+    </style>
+</head>
+<body>
+<div id="ui-layer">
+    <h2>Energy Core v1.0</h2>
+    <div class="instruction">
+        다중 포스트 프로세싱 렌더링 파이프라인이 적용된 코어입니다. 화면을 드래그하여 시점을 이동하십시오.
+    </div>
+
+    <div class="control-group">
+        <label><span>코어 회전 (Rotation)</span> <span id="val-rot">1.0</span></label>
+        <input type="range" id="inp-rot" min="0.1" max="5.0" step="0.1" value="1.0">
+    </div>
+    <div class="control-group">
+        <label><span>블룸 강도 (Bloom)</span> <span id="val-bloom">2.0</span></label>
+        <input type="range" id="inp-bloom" min="0.0" max="4.0" step="0.1" value="2.0">
+    </div>
+    <div class="control-group">
+        <label><span>색수차 분리 (RGB Shift)</span> <span id="val-rgb">0.003</span></label>
+        <input type="range" id="inp-rgb" min="0.0" max="0.015" step="0.001" value="0.003">
+    </div>
+</div>
+
+<script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+      }
+    }
+</script>
+
+<script type="module">
+    import * as THREE from 'three';
+    import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+    import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+    import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+    import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+
+    // 1. Scene Setup
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050505, 0.02);
+
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 0, 30);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    document.body.appendChild(renderer.domElement);
+
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.dampingFactor = 0.05;
+
+    // 2. Core Object (Torus Knot)
+    const coreGeometry = new THREE.TorusKnotGeometry(6, 1.5, 200, 32);
+    const coreMaterial = new THREE.MeshBasicMaterial({
+        color: 0xff007f,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.3,
+        blending: THREE.AdditiveBlending
+    });
+    const coreMesh = new THREE.Mesh(coreGeometry, coreMaterial);
+    scene.add(coreMesh);
+
+    const innerCoreGeo = new THREE.IcosahedronGeometry(4, 2);
+    const innerCoreMat = new THREE.MeshBasicMaterial({
+        color: 0x00e5ff,
+        wireframe: true,
+        transparent: true,
+        opacity: 0.1,
+        blending: THREE.AdditiveBlending
+    });
+    const innerCoreMesh = new THREE.Mesh(innerCoreGeo, innerCoreMat);
+    coreMesh.add(innerCoreMesh);
+
+    // 3. Orbital Particles Setup
+    const particleCount = 15000;
+    const particleGeo = new THREE.BufferGeometry();
+    const particlePos = new Float32Array(particleCount * 3);
+    const particleBaseRadius = new Float32Array(particleCount);
+    const particleOffsets = new Float32Array(particleCount);
+
+    for (let i = 0; i < particleCount; i++) {
+        const radius = 10 + Math.random() * 15;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos((Math.random() * 2) - 1);
+
+        particlePos[i * 3] = radius * Math.sin(phi) * Math.cos(theta);
+        particlePos[i * 3 + 1] = radius * Math.sin(phi) * Math.sin(theta);
+        particlePos[i * 3 + 2] = radius * Math.cos(phi);
+
+        particleBaseRadius[i] = radius;
+        particleOffsets[i] = Math.random() * Math.PI * 2;
+    }
+
+    particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+    particleGeo.setAttribute('aRadius', new THREE.BufferAttribute(particleBaseRadius, 1));
+    particleGeo.setAttribute('aOffset', new THREE.BufferAttribute(particleOffsets, 1));
+
+    const particleMat = new THREE.ShaderMaterial({
+        uniforms: {
+            uTime: { value: 0 },
+            uColor: { value: new THREE.Color(0x00e5ff) }
+        },
+        vertexShader: `
+                uniform float uTime;
+                attribute float aRadius;
+                attribute float aOffset;
+                void main() {
+                    vec3 pos = position;
+                    // Pulsating orbital movement
+                    float pulse = sin(uTime * 2.0 + aOffset) * 2.0;
+                    vec3 dir = normalize(pos);
+                    pos += dir * pulse;
+
+                    // Orbital rotation
+                    float angle = uTime * 0.5;
+                    mat3 rotY = mat3(
+                        cos(angle), 0.0, sin(angle),
+                        0.0, 1.0, 0.0,
+                        -sin(angle), 0.0, cos(angle)
+                    );
+                    pos = rotY * pos;
+
+                    vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+                    gl_Position = projectionMatrix * mvPosition;
+                    gl_PointSize = (15.0 / -mvPosition.z);
+                }
+            `,
+        fragmentShader: `
+                uniform vec3 uColor;
+                void main() {
+                    vec2 coord = gl_PointCoord - vec2(0.5);
+                    if (length(coord) > 0.5) discard;
+                    gl_FragColor = vec4(uColor, 0.8);
+                }
+            `,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        transparent: true
+    });
+
+    const particleMesh = new THREE.Points(particleGeo, particleMat);
+    scene.add(particleMesh);
+
+    // 4. Post-Processing Pipeline
+    const composer = new EffectComposer(renderer);
+
+    const renderPass = new RenderPass(scene, camera);
+    composer.addPass(renderPass);
+
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.0, 0.5, 0.1);
+    composer.addPass(bloomPass);
+
+    // Custom RGB Shift / Chromatic Aberration Shader
+    const rgbShiftShader = {
+        uniforms: {
+            tDiffuse: { value: null },
+            amount: { value: 0.003 },
+            angle: { value: 0.0 }
+        },
+        vertexShader: `
+                varying vec2 vUv;
+                void main() {
+                    vUv = uv;
+                    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+                }
+            `,
+        fragmentShader: `
+                uniform sampler2D tDiffuse;
+                uniform float amount;
+                uniform float angle;
+                varying vec2 vUv;
+                void main() {
+                    vec2 offset = amount * vec2(cos(angle), sin(angle));
+                    vec4 cr = texture2D(tDiffuse, vUv + offset);
+                    vec4 cga = texture2D(tDiffuse, vUv);
+                    vec4 cb = texture2D(tDiffuse, vUv - offset);
+                    gl_FragColor = vec4(cr.r, cga.g, cb.b, cga.a);
+                }
+            `
+    };
+
+    const rgbPass = new ShaderPass(rgbShiftShader);
+    composer.addPass(rgbPass);
+
+    // 5. UI Control Bindings
+    const bindControl = (id, callback) => {
+        const el = document.getElementById(id);
+        const display = document.getElementById(id.replace('inp-', 'val-'));
+        el.addEventListener('input', () => {
+            display.textContent = el.value;
+            callback(parseFloat(el.value));
+        });
+    };
+
+    let rotSpeed = 1.0;
+    bindControl('inp-rot', (val) => rotSpeed = val);
+    bindControl('inp-bloom', (val) => bloomPass.strength = val);
+    bindControl('inp-rgb', (val) => rgbPass.uniforms.amount.value = val);
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // 6. Animation Loop
+    const clock = new THREE.Clock();
+
+    function animate() {
+        requestAnimationFrame(animate);
+        const time = clock.getElapsedTime();
+
+        coreMesh.rotation.x = time * 0.5 * rotSpeed;
+        coreMesh.rotation.y = time * 0.8 * rotSpeed;
+
+        innerCoreMesh.rotation.x = -time * 0.3 * rotSpeed;
+        innerCoreMesh.rotation.z = time * 0.6 * rotSpeed;
+
+        const scale = 1.0 + Math.sin(time * 3.0) * 0.1;
+        coreMesh.scale.set(scale, scale, scale);
+
+        particleMat.uniforms.uTime.value = time;
+        rgbPass.uniforms.angle.value = time; // Dynamic chromatic aberration angle
+
+        controls.update();
+        composer.render();
+    }
+    animate();
+</script>
+</body>
+</html>
